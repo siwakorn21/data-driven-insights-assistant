@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  # Production build with Nginx
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: data-driven-insight-assistant
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+
+  # Development server with hot-reload
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: data-driven-insight-assistant-dev
+    ports:
+      - "5173:5173"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=development
