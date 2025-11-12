@@ -1,24 +1,72 @@
 version: '3.8'
 
 services:
-  # Production build with Nginx
-  app:
+  # ==================== BACKEND SERVICES ====================
+
+  # Backend API (Production)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: data-insight-backend
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - CORS_ORIGINS=http://localhost:5173,http://localhost:8080
+      - SESSION_TTL_HOURS=2
+      - MAX_FILE_SIZE_MB=100
+    volumes:
+      - backend-uploads:/app/uploads
+    networks:
+      - app-network
+
+  # Backend API (Development with hot-reload)
+  backend-dev:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: data-insight-backend-dev
+    ports:
+      - "8001:8000"
+    restart: unless-stopped
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - CORS_ORIGINS=http://localhost:5173,http://localhost:8080
+      - SESSION_TTL_HOURS=2
+      - MAX_FILE_SIZE_MB=100
+    volumes:
+      - ./backend:/app
+      - backend-uploads-dev:/app/uploads
+    networks:
+      - app-network
+
+  # ==================== FRONTEND SERVICES ====================
+
+  # Frontend (Production build with Nginx)
+  frontend:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: data-driven-insight-assistant
+    container_name: data-insight-frontend
     ports:
       - "8080:80"
     restart: unless-stopped
     environment:
       - NODE_ENV=production
+      - VITE_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+    networks:
+      - app-network
 
-  # Development server with hot-reload
-  dev:
+  # Frontend (Development server with hot-reload)
+  frontend-dev:
     build:
       context: .
       dockerfile: Dockerfile.dev
-    container_name: data-driven-insight-assistant-dev
+    container_name: data-insight-frontend-dev
     ports:
       - "5173:5173"
     volumes:
@@ -27,3 +75,16 @@ services:
     restart: unless-stopped
     environment:
       - NODE_ENV=development
+      - VITE_API_URL=http://localhost:8001
+    depends_on:
+      - backend-dev
+    networks:
+      - app-network
+
+volumes:
+  backend-uploads:
+  backend-uploads-dev:
+
+networks:
+  app-network:
+    driver: bridge

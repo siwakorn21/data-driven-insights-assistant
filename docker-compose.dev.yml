@@ -1,0 +1,50 @@
+version: '3.8'
+
+# Development-only docker-compose file
+# Usage: docker-compose -f docker-compose.dev.yml up
+
+services:
+  backend-dev:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: data-insight-backend-dev
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - CORS_ORIGINS=http://localhost:5173,http://localhost:8080
+      - SESSION_TTL_HOURS=2
+      - MAX_FILE_SIZE_MB=100
+    volumes:
+      - ./backend:/app
+      - backend-uploads-dev:/app/uploads
+    networks:
+      - app-network
+
+  frontend-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: data-insight-frontend-dev
+    ports:
+      - "5173:5173"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=development
+      - VITE_API_URL=http://localhost:8000
+    depends_on:
+      - backend-dev
+    networks:
+      - app-network
+
+volumes:
+  backend-uploads-dev:
+
+networks:
+  app-network:
+    driver: bridge
