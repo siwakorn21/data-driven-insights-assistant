@@ -1,8 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { motion } from "framer-motion";
-import Papa from "papaparse";
-// Use the browser build of sql.js to avoid Node's `fs` in bundlers
-import initSqlJs from "sql.js";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,7 +20,9 @@ import {
   LineChart,
   Line
 } from "recharts";
-import { SYSTEM_PROMPT, CHART_COLORS, WELCOME_MESSAGE } from "@/config/prompts";
+import { CHART_COLORS, WELCOME_MESSAGE } from "@/config/prompts";
+import { apiClient } from "@/api";
+import type { ColumnSchema } from "@/types/api";
 
 // ---------- Types ----------
 type RowData = Record<string, any>;
@@ -31,222 +30,155 @@ type ChartHint = { type: 'line' | 'bar'; x: string; y: string } | null;
 type Message = { role: string; content: string };
 
 // ---------- Utilities ----------
-const normalizeCol = (name: string): string =>
-  String(name).trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "col";
+const looksDateish = (colName: string, sample?: any): boolean =>
+  /date|time|day|month|year/i.test(colName) || (!!sample && !isNaN(new Date(sample).getTime()));
 
-function guessType(value: any): string {
-  if (value === null || value === undefined || value === "") return "TEXT";
-  const num = Number(value);
-  if (!Number.isNaN(num) && value !== true && value !== false) return "REAL";
-  const d = new Date(value);
-  if (!isNaN(d.getTime())) return "TEXT"; // keep TEXT; use SQLite date funcs
-  return "TEXT";
-}
-
-const looksDateish = (colName: string, sample?: any): boolean => /date|time|day|month|year/i.test(colName) || (!!sample && !isNaN(new Date(sample).getTime()));
 const isNumeric = (v: any): boolean => typeof v === "number" && !Number.isNaN(v);
+
 const head = <T,>(arr: T[], n = 5): T[] => arr.slice(0, n);
 
 export default function App() {
-  const [apiKey, setApiKey] = useState("");
-  const [model, setModel] = useState("gpt-4o-mini");
+  // Session state
+  const [sessionId, setSessionId] = useState<string>("");
+  const [fileName, setFileName] = useState<string>("");
 
-  const [dbInit, setDbInit] = useState(false);
-  const dbRef = useRef<any>(null);
+  // Data state
+  const [rowCount, setRowCount] = useState<number>(0);
+  const [columnCount, setColumnCount] = useState<number>(0);
+  const [schemaText, setSchemaText] = useState<string>("");
 
-  const [rows, setRows] = useState<RowData[]>([]);
-  const [, setCols] = useState<string[]>([]);
-  const [schemaText, setSchemaText] = useState("");
-
+  // UI state
   const [messages, setMessages] = useState<Message[]>([
     { role: "system", content: WELCOME_MESSAGE }
   ]);
-  const [userInput, setUserInput] = useState("");
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState("");
+  const [userInput, setUserInput] = useState<string>("");
+  const [pending, setPending] = useState<boolean>(false);
+  const [uploading, setUploading] = useState<boolean>(false);
+  const [error, setError] = useState<string>("");
 
-  const [result, setResult] = useState<{ columns: string[]; rows: RowData[] }>({ columns: [], rows: [] });
-  const [lastSQL, setLastSQL] = useState("");
+  // Result state
+  const [result, setResult] = useState<{ columns: string[]; rows: RowData[] }>({
+    columns: [],
+    rows: []
+  });
+  const [lastSQL, setLastSQL] = useState<string>("");
   const [chartHint, setChartHint] = useState<ChartHint>(null);
 
-  const [clarContext] = useState<Record<string, any>>({}); // e.g., { date_column: 'booking_date' }
+  const [clarContext] = useState<Record<string, any>>({});
 
-  // -------- Init sql.js (browser build) --------
-  useEffect(() => {
-    (async () => {
-      try {
-        const SQL = await initSqlJs({ locateFile: (f: string) => `https://sql.js.org/dist/${f}` });
-        dbRef.current = new SQL.Database();
-        setDbInit(true);
-      } catch (e) {
-        console.error(e);
-        setError("Failed to init in-browser SQLite.");
-      }
-    })();
-  }, []);
-
-  // -------- CSV ingest --------
-  const onCSV = (file: File) => {
+  // -------- CSV Upload --------
+  const onCSV = async (file: File) => {
     setError("");
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (res) => {
-        const data = res.data as any[] || [];
-        if (!data.length) {
-          setError("CSV is empty or has no header row.");
-          return;
-        }
-        const rawCols = Object.keys(data[0]);
-        const normCols = rawCols.map(normalizeCol);
-        const types = normCols.map((_c, i) => guessType(data[0][rawCols[i]]));
+    setUploading(true);
 
-        try {
-          const create = `DROP TABLE IF EXISTS "data"; CREATE TABLE "data"(${normCols.map((c, i) => `"${c}" ${types[i]}`).join(", ")});`;
-          dbRef.current!.run(create);
-          const insert = dbRef.current!.prepare(`INSERT INTO "data" (${normCols.map((c) => `"${c}"`).join(", ")}) VALUES (${normCols.map(() => "?").join(", ")});`);
-          const insertedRows: RowData[] = [];
-          for (const r of data) {
-            const vals = normCols.map((_c, idx) => {
-              const v = r[rawCols[idx]];
-              if (types[idx] === "REAL") {
-                const n = Number(v);
-                return Number.isNaN(n) ? null : n;
-              }
-              return v === "" ? null : v;
-            });
-            insert.run(vals);
-            insertedRows.push(Object.fromEntries(normCols.map((c, i) => [c, vals[i]])));
-          }
-          insert.free();
-
-          setRows(insertedRows);
-          setCols(normCols);
-
-          const samples = head(insertedRows, 5);
-          const schemaLines = normCols.map((c, i) => {
-            const sample = samples.map((s) => s[c]).find((v) => v !== undefined && v !== null);
-            return `- ${c} (${types[i]}) e.g. ${sample}`;
-          });
-          setSchemaText(schemaLines.join("\n"));
-
-          setMessages((m) => [...m, { role: "assistant", content: `Loaded ${insertedRows.length} rows, ${normCols.length} columns.` }]);
-        } catch (e) {
-          console.error(e);
-          setError("Failed to load CSV into in-browser database.");
-        }
-      },
-      error: (err) => {
-        console.error(err);
-        setError("Failed to parse CSV.");
-      }
-    });
-  };
-
-  // -------- LLM planner --------
-  // Sends request to OpenAI to convert natural language to SQL
-  // For details on what data is sent, see: docs/API_REQUEST.md
-  async function callPlanner(nl: string, context: Record<string, any> = {}) {
-    if (!apiKey) throw new Error("Please enter your OpenAI API key.");
-
-    // Construct user message with question + schema
-    // Only sends: question, column names, types, and sample values (first row)
-    // Does NOT send: full CSV data, all rows, or sensitive information
-    const user = `User question: ${nl}\n\nTable schema (SQLite):\n${schemaText}\n\nContext (answers to prior clarifications):\n${JSON.stringify(context)}`;
-
-    const body = {
-      model,
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: user }
-      ],
-      temperature: 0.2
-    };
-    const resp = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify(body)
-    });
-    if (!resp.ok) throw new Error(await resp.text());
-    const json = await resp.json();
-    const content = json.choices?.[0]?.message?.content || "";
-
-    // Try to parse strict JSON
-    const match = content.match(/\{[\s\S]*\}/);
-    const raw = match ? match[0] : content;
-    let parsed;
-    try { parsed = JSON.parse(raw); } catch {
-      throw new Error("Planner did not return valid JSON.\n" + content);
-    }
-    // Validate envelope
-    if (!("ask_clarification" in parsed) || !("sql" in parsed)) {
-      throw new Error("Planner JSON missing required keys.");
-    }
-    return parsed;
-  }
-
-  const runSQL = (sql: string): { columns: string[]; rows: RowData[] } => {
-    if (!sql || sql.trim() === '') {
-      throw new Error('SQL query is empty');
-    }
-    if (!dbRef.current) {
-      throw new Error('Database not initialized. Please refresh the page.');
-    }
-    if (rows.length === 0) {
-      throw new Error('No data loaded. Please upload a CSV file first.');
-    }
     try {
-      const stmt = dbRef.current.prepare(sql);
-      const out: RowData[] = [];
-      const names = stmt.getColumnNames();
-      while (stmt.step()) out.push(stmt.getAsObject());
-      stmt.free();
-      return { columns: names, rows: out };
+      // Call backend upload API
+      const response = await apiClient.uploadCSV(file);
+
+      // Update state with response
+      setSessionId(response.session_id);
+      setFileName(response.filename);
+      setRowCount(response.row_count);
+      setColumnCount(response.column_count);
+
+      // Get schema from backend
+      const schemaResponse = await apiClient.getSchema(response.session_id);
+
+      // Format schema for display
+      const schemaLines = schemaResponse.columns.map((col: ColumnSchema) => {
+        const sample = col.sample !== null && col.sample !== undefined ? col.sample : "";
+        return `- ${col.name} (${col.type}) e.g. ${sample}`;
+      });
+      setSchemaText(schemaLines.join("\n"));
+
+      setMessages((m) => [
+        ...m,
+        {
+          role: "assistant",
+          content: `Loaded ${response.row_count} rows, ${response.column_count} columns.`
+        }
+      ]);
     } catch (e: any) {
-      const msg = e.message || 'Invalid SQL query';
-      if (msg.includes('no such table')) {
-        throw new Error('Table not found. Please upload a CSV file first.');
-      }
-      throw new Error(`SQL Error: ${msg}`);
+      console.error(e);
+      setError(`Failed to upload CSV: ${e.message}`);
+    } finally {
+      setUploading(false);
     }
   };
 
+  // -------- Auto Chart --------
   function autoChart(columns: string[], data: RowData[]): ChartHint {
     if (!columns.length || !data.length) return null;
+
     if (columns.length === 2) {
       const [x, y] = columns;
       const numericY = data.every((r) => isNumeric(r[y]) || r[y] == null);
       const dateX = looksDateish(x, data[0]?.[x]);
       if (numericY) return { type: dateX ? "line" as const : "bar" as const, x, y };
     }
+
     // Fallback: pick first string as x and first numeric as y
     const x = columns.find((c) => typeof data[0]?.[c] === "string");
     const y = columns.find((c) => data.every((r) => isNumeric(r[c]) || r[c] == null));
     if (x && y) return { type: "bar" as const, x, y };
+
     return null;
   }
 
+  // -------- Send Query --------
   async function onSend() {
     if (!userInput.trim()) return;
+    if (!sessionId) {
+      setError("Please upload a CSV file first.");
+      return;
+    }
+
     setPending(true);
     setError("");
     setMessages((m) => [...m, { role: "user", content: userInput }]);
+
     try {
-      const plan = await callPlanner(userInput, clarContext);
-      if (plan.ask_clarification) {
-        const q = plan.clarification;
+      // Call backend query API
+      const response = await apiClient.executeQuery({
+        session_id: sessionId,
+        question: userInput,
+        context: clarContext,
+      });
+
+      // Handle clarification
+      if (response.ask_clarification) {
+        const q = response.clarification;
         const opts = q?.options?.length ? `\nOptions: ${q.options.join(", ")}` : "";
-        setMessages((m) => [...m, { role: "assistant", content: `${q?.question || "Could you clarify?"}${opts}` }]);
-      } else {
-        const { sql, explanation } = plan;
-        if (!sql) {
-          throw new Error("AI did not generate a SQL query. Please try rephrasing your question.");
+        setMessages((m) => [
+          ...m,
+          {
+            role: "assistant",
+            content: `${q?.question || "Could you clarify?"}${opts}`
+          }
+        ]);
+      }
+      // Handle error
+      else if (response.error) {
+        setError(response.error);
+      }
+      // Handle SQL result
+      else {
+        const { sql, columns, rows, explanation } = response;
+
+        if (!sql || !columns || !rows) {
+          throw new Error("Invalid response from backend");
         }
-        const exec = runSQL(sql);
+
         setLastSQL(sql);
-        setResult(exec);
-        setChartHint(autoChart(exec.columns, exec.rows));
-        setMessages((m) => [...m, { role: "assistant", content: explanation || "Here's what I found." }]);
+        setResult({ columns, rows });
+        setChartHint(autoChart(columns, rows));
+        setMessages((m) => [
+          ...m,
+          {
+            role: "assistant",
+            content: explanation || "Here's what I found."
+          }
+        ]);
       }
     } catch (e: any) {
       console.error(e);
@@ -257,43 +189,50 @@ export default function App() {
     }
   }
 
-  // When user answers a clarification, call planner again with context
-  // async function answerClarification(id: string, value: any) {
-  //   const ctx = { ...clarContext, [id]: value };
-  //   setClarContext(ctx);
-  //   setPending(true);
-  //   setError("");
-  //   try {
-  //     const plan = await callPlanner(messages.filter(m=>m.role==="user").slice(-1)[0]?.content || "", ctx);
-  //     if (plan.ask_clarification) {
-  //       const q = plan.clarification;
-  //       const opts = q?.options?.length ? `\nOptions: ${q.options.join(", ")}` : "";
-  //       setMessages((m) => [...m, { role: "assistant", content: `${q?.question || "Could you clarify?"}${opts}` }]);
-  //     } else {
-  //       const { sql, explanation } = plan;
-  //       const exec = runSQL(sql);
-  //       setLastSQL(sql);
-  //       setResult(exec);
-  //       setChartHint(autoChart(exec.columns, exec.rows));
-  //       setMessages((m) => [...m, { role: "assistant", content: explanation || "Here's what I found." }]);
-  //     }
-  //   } catch (e: any) {
-  //     console.error(e);
-  //     setError(String(e.message || e));
-  //   } finally {
-  //     setPending(false);
-  //   }
-  // }
+  // -------- Execute SQL --------
+  const runSQL = async (sql: string) => {
+    if (!sql.trim()) {
+      setError("SQL query is empty");
+      return;
+    }
+    if (!sessionId) {
+      setError("No session found. Please upload a CSV file.");
+      return;
+    }
 
+    try {
+      setError("");
+      const response = await apiClient.executeSQL({
+        session_id: sessionId,
+        sql: sql,
+      });
+
+      setResult({ columns: response.columns, rows: response.rows });
+      setChartHint(autoChart(response.columns, response.rows));
+      setMessages((m) => [
+        ...m,
+        { role: "assistant", content: "Query executed successfully." }
+      ]);
+    } catch (e: any) {
+      setError(String(e.message || e));
+    }
+  };
+
+  // -------- Download CSV --------
   const downloadCSV = () => {
     if (!result.columns.length) return;
+
     const header = result.columns.join(",");
-    const lines = result.rows.map((r: RowData) => result.columns.map((c) => JSON.stringify(r[c] ?? "")).join(","));
+    const lines = result.rows.map((r: RowData) =>
+      result.columns.map((c) => JSON.stringify(r[c] ?? "")).join(",")
+    );
     const csv = [header, ...lines].join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url; a.download = "query_result.csv"; a.click();
+    a.href = url;
+    a.download = "query_result.csv";
+    a.click();
     URL.revokeObjectURL(url);
   };
 
@@ -304,16 +243,7 @@ export default function App() {
           <div className="flex items-center gap-3">
             <Sparkles className="w-6 h-6" />
             <h1 className="text-xl font-semibold">Data-Driven Insights Assistant</h1>
-            <Badge variant="secondary">Client-only</Badge>
-          </div>
-          <div className="flex items-center gap-2">
-            <Label htmlFor="model" className="text-sm">Model</Label>
-            <select id="model" className="border rounded-md px-2 py-1 text-sm" value={model} onChange={(e)=>setModel(e.target.value)}>
-              <option value="gpt-4o-mini">gpt-4o-mini</option>
-              <option value="gpt-4o">gpt-4o</option>
-              <option value="gpt-4.1-mini">gpt-4.1-mini</option>
-            </select>
-            <Input type="password" placeholder="OpenAI API Key" value={apiKey} onChange={(e)=>setApiKey(e.target.value)} className="w-56" />
+            <Badge variant="secondary">Backend-Powered</Badge>
           </div>
         </div>
       </header>
@@ -323,22 +253,39 @@ export default function App() {
         <div className="lg:col-span-1 space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2"><Upload className="w-5 h-5"/> Upload CSV</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Upload className="w-5 h-5"/> Upload CSV
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <input type="file" accept=".csv,text/csv" onChange={(e)=> e.target.files && onCSV(e.target.files[0])} />
-              {!dbInit && (
-                <div className="flex items-center gap-2 text-sm text-slate-600"><Loader2 className="w-4 h-4 animate-spin"/> Initializing SQLite…</div>
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                onChange={(e) => e.target.files && onCSV(e.target.files[0])}
+                disabled={uploading}
+              />
+              {uploading && (
+                <div className="flex items-center gap-2 text-sm text-slate-600">
+                  <Loader2 className="w-4 h-4 animate-spin"/> Uploading...
+                </div>
               )}
-              {rows.length>0 && (
+              {sessionId && (
                 <Alert>
                   <AlertTitle>Table ready</AlertTitle>
                   <AlertDescription>
-                    <div className="flex items-center gap-2 text-sm"><Database className="w-4 h-4"/> Loaded {rows.length} rows</div>
+                    <div className="flex items-center gap-2 text-sm">
+                      <Database className="w-4 h-4"/>
+                      Loaded {rowCount} rows, {columnCount} columns
+                    </div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      Session: {sessionId.substring(0, 8)}...
+                    </div>
                   </AlertDescription>
                 </Alert>
               )}
-              <div className="text-xs text-slate-600">Tip: Include columns like <em>hotel</em>, <em>revenue</em>, <em>booking_date</em>, <em>country</em>, <em>nights</em>.</div>
+              <div className="text-xs text-slate-600">
+                Tip: Include columns like <em>hotel</em>, <em>revenue</em>, <em>booking_date</em>, <em>country</em>, <em>nights</em>.
+              </div>
             </CardContent>
           </Card>
 
@@ -347,9 +294,11 @@ export default function App() {
               <CardTitle>Schema & Hints</CardTitle>
             </CardHeader>
             <CardContent>
-              <pre className="text-xs whitespace-pre-wrap max-h-64 overflow-auto border rounded-md p-2 bg-slate-50">{schemaText || "(Upload a CSV to see inferred schema)"}</pre>
+              <pre className="text-xs whitespace-pre-wrap max-h-64 overflow-auto border rounded-md p-2 bg-slate-50">
+                {schemaText || "(Upload a CSV to see inferred schema)"}
+              </pre>
               <div className="text-xs text-slate-600 mt-2">
-                I’ll ask clarifying questions <HelpCircle className="inline w-3 h-3"/> when needed. Examples:
+                I'll ask clarifying questions <HelpCircle className="inline w-3 h-3"/> when needed. Examples:
                 <ul className="list-disc ml-4 mt-1">
                   <li>Top 5 hotels by revenue last month</li>
                   <li>Average review score by country</li>
@@ -364,37 +313,52 @@ export default function App() {
         <div className="lg:col-span-2 space-y-4">
           <Card className="h-[28rem] flex flex-col">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2"><Bot className="w-5 h-5"/> Ask your data</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Bot className="w-5 h-5"/> Ask your data
+              </CardTitle>
             </CardHeader>
             <CardContent className="flex-1 overflow-hidden flex flex-col">
               <div className="flex-1 overflow-auto space-y-3 p-1">
-                {messages.filter(m=>m.role!=='system').map((m,i)=> (
-                  <motion.div key={i} initial={{opacity:0,y:4}} animate={{opacity:1,y:0}} className={m.role==='user' ? 'text-right' : 'text-left'}>
-                    <div className={`inline-block rounded-2xl px-3 py-2 text-sm shadow ${m.role==='user' ? 'bg-blue-50' : 'bg-slate-100'}`}>{m.content}</div>
+                {messages.filter(m => m.role !== 'system').map((m, i) => (
+                  <motion.div
+                    key={i}
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className={m.role === 'user' ? 'text-right' : 'text-left'}
+                  >
+                    <div className={`inline-block rounded-2xl px-3 py-2 text-sm shadow ${
+                      m.role === 'user' ? 'bg-blue-50' : 'bg-slate-100'
+                    }`}>
+                      {m.content}
+                    </div>
                   </motion.div>
                 ))}
               </div>
               <div className="flex items-center gap-2 pt-2 border-t">
                 <Textarea
                   placeholder={
-                    !dbInit ? "Initializing database..." :
-                    !rows.length ? "Upload a CSV file first to start asking questions..." :
-                    "e.g., Show me the top 5 hotels by revenue last month"
+                    !sessionId
+                      ? "Upload a CSV file first to start asking questions..."
+                      : "e.g., Show me the top 5 hotels by revenue last month"
                   }
                   className="flex-1"
                   value={userInput}
-                  onChange={(e)=>setUserInput(e.target.value)}
-                  onKeyDown={(e)=>{ if(e.key==='Enter' && (e.metaKey||e.ctrlKey)) onSend(); }}
-                  disabled={!dbInit || !rows.length}
+                  onChange={(e) => setUserInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) onSend();
+                  }}
+                  disabled={!sessionId || uploading}
                 />
-                <Button onClick={onSend} disabled={pending || !dbInit || !rows.length}>
+                <Button onClick={onSend} disabled={pending || !sessionId || uploading}>
                   {pending ? <Loader2 className="w-4 h-4 animate-spin"/> : <Send className="w-4 h-4"/>}
                 </Button>
               </div>
               {error && (
                 <Alert variant="destructive" className="mt-2">
                   <AlertTitle>Something went wrong</AlertTitle>
-                  <AlertDescription className="text-xs whitespace-pre-wrap">{error}</AlertDescription>
+                  <AlertDescription className="text-xs whitespace-pre-wrap">
+                    {error}
+                  </AlertDescription>
                 </Alert>
               )}
             </CardContent>
@@ -406,6 +370,7 @@ export default function App() {
               <TabsTrigger value="chart">Chart</TabsTrigger>
               <TabsTrigger value="sql">SQL</TabsTrigger>
             </TabsList>
+
             <TabsContent value="table">
               <Card>
                 <CardHeader>
@@ -413,26 +378,38 @@ export default function App() {
                 </CardHeader>
                 <CardContent>
                   {!result.columns.length ? (
-                    <div className="text-sm text-slate-600">Run a query to see results here.</div>
+                    <div className="text-sm text-slate-600">
+                      Run a query to see results here.
+                    </div>
                   ) : (
                     <div className="overflow-auto max-h-[28rem]">
                       <table className="w-full text-sm">
                         <thead className="sticky top-0 bg-white">
                           <tr>
-                            {result.columns.map((c) => (<th key={c} className="text-left p-2 border-b">{c}</th>))}
+                            {result.columns.map((c) => (
+                              <th key={c} className="text-left p-2 border-b">{c}</th>
+                            ))}
                           </tr>
                         </thead>
                         <tbody>
-                          {head(result.rows, 500).map((r: RowData, i: number)=> (
+                          {head(result.rows, 500).map((r: RowData, i: number) => (
                             <tr key={i} className="odd:bg-slate-50">
-                              {result.columns.map((c)=> (<td key={c} className="p-2 border-b">{String(r[c] ?? "")}</td>))}
+                              {result.columns.map((c) => (
+                                <td key={c} className="p-2 border-b">
+                                  {String(r[c] ?? "")}
+                                </td>
+                              ))}
                             </tr>
                           ))}
                         </tbody>
                       </table>
                       <div className="flex items-center justify-between mt-2">
-                        <div className="text-xs text-slate-600">Showing up to 500 rows.</div>
-                        <Button size="sm" variant="secondary" onClick={downloadCSV}>Download CSV</Button>
+                        <div className="text-xs text-slate-600">
+                          Showing up to 500 rows.
+                        </div>
+                        <Button size="sm" variant="secondary" onClick={downloadCSV}>
+                          Download CSV
+                        </Button>
                       </div>
                     </div>
                   )}
@@ -447,7 +424,9 @@ export default function App() {
                 </CardHeader>
                 <CardContent>
                   {!chartHint || !result.rows.length ? (
-                    <div className="text-sm text-slate-600">Run a query that returns an X and numeric Y (and optionally date-ish X) to auto-chart.</div>
+                    <div className="text-sm text-slate-600">
+                      Run a query that returns an X and numeric Y (and optionally date-ish X) to auto-chart.
+                    </div>
                   ) : chartHint.type === 'line' ? (
                     <LineChart width={800} height={360} data={result.rows as any}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
@@ -499,20 +478,17 @@ export default function App() {
                   <CardTitle>Generated SQL</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <Textarea className="font-mono text-xs" rows={10} value={lastSQL} onChange={(e)=>setLastSQL(e.target.value)} />
+                  <Textarea
+                    className="font-mono text-xs"
+                    rows={10}
+                    value={lastSQL}
+                    onChange={(e) => setLastSQL(e.target.value)}
+                  />
                   <div className="flex gap-2 mt-2">
-                    <Button onClick={()=>{
-                      try {
-                        setError("");
-                        const exec = runSQL(lastSQL);
-                        setResult(exec);
-                        setChartHint(autoChart(exec.columns, exec.rows));
-                        setMessages((m) => [...m, { role: "assistant", content: "Query executed successfully." }]);
-                      } catch(e: any){
-                        setError(String(e.message || e));
-                      }
-                    }}>Run SQL</Button>
-                    <Button variant="secondary" onClick={()=>navigator.clipboard.writeText(lastSQL)}>Copy</Button>
+                    <Button onClick={() => runSQL(lastSQL)}>Run SQL</Button>
+                    <Button variant="secondary" onClick={() => navigator.clipboard.writeText(lastSQL)}>
+                      Copy
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
@@ -522,7 +498,9 @@ export default function App() {
       </main>
 
       <footer className="max-w-6xl mx-auto px-4 py-6 text-xs text-slate-500">
-        <div>Privacy: your CSV remains in the browser. The LLM sees only your question and the inferred schema/samples.</div>
+        <div>
+          Privacy: your CSV is processed on the backend. The LLM sees only your question and the inferred schema/samples.
+        </div>
       </footer>
     </div>
   );

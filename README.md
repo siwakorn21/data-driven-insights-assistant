@@ -1,229 +1,315 @@
 # Data-Driven Insights Assistant
 
-A modern React application that allows users to upload CSV files, ask natural language questions about their data, and get AI-powered insights with beautiful visualizations. All data processing happens **client-side** in your browser - no backend required!
+A full-stack application that enables natural language querying of CSV data using OpenAI and DuckDB.
 
-## ✨ Features
+## Architecture
 
-### Core Functionality
-- 📤 **CSV Upload** - Upload any CSV file and it's loaded into an in-browser SQLite database
-- 🤖 **AI-Powered Queries** - Ask questions in plain English, get SQL queries automatically
-- 📊 **Beautiful Charts** - Auto-generated bar and line charts with 8-color palette
-- 📋 **Data Tables** - View results in interactive tables with up to 500 rows
-- 💾 **Export Results** - Download query results as CSV
-- ✏️ **SQL Editor** - View, edit, and run generated SQL queries manually
-
-### Smart Features
-- 🎨 **Multi-Color Charts** - Automatic color cycling for multiple data series
-- 🔍 **Schema Detection** - Automatically infers column types from your data
-- 💬 **Chat Interface** - Natural conversation flow with the AI
-- ⚠️ **Smart Error Messages** - Clear, actionable error messages
-- 🚀 **Fast Performance** - All processing happens locally in your browser
-- 🔒 **Privacy First** - Your data never leaves your browser
-
-## 🎯 Prerequisites
-
-- **Node.js** 18+ and npm
-- **OpenAI API key** (get one at [platform.openai.com](https://platform.openai.com))
-
-## 🚀 Quick Start
-
-### Installation
-
-```bash
-# Install dependencies
-npm install
+```
+┌─────────────────────────────────────────────────────────────┐
+│                         Browser                              │
+│  ┌────────────────────────────────────────────────────┐    │
+│  │  React + TypeScript + Vite                         │    │
+│  │  - Upload CSV interface                            │    │
+│  │  - Natural language chat                           │    │
+│  │  - Results visualization (tables + charts)         │    │
+│  └──────────────────┬─────────────────────────────────┘    │
+└─────────────────────┼──────────────────────────────────────┘
+                      │ REST API
+                      │
+┌─────────────────────▼──────────────────────────────────────┐
+│                    Backend Server                           │
+│  ┌────────────────────────────────────────────────────┐    │
+│  │  FastAPI + Python                                  │    │
+│  │  ├── CSV Upload & Session Management              │    │
+│  │  ├── DuckDB for SQL Execution                     │    │
+│  │  ├── OpenAI for NL → SQL Conversion              │    │
+│  │  └── Background Cleanup Tasks                     │    │
+│  └──────────────────┬─────────────────────────────────┘    │
+└─────────────────────┼──────────────────────────────────────┘
+                      │
+                      ▼
+              ┌──────────────┐
+              │  OpenAI API  │
+              └──────────────┘
 ```
 
-### Development
+## Features
+
+- **Natural Language Queries**: Ask questions in plain English
+- **Automatic SQL Generation**: Powered by OpenAI GPT models
+- **Fast CSV Processing**: DuckDB queries data directly without loading into memory
+- **Smart Clarifications**: System asks for clarification when needed
+- **Interactive Visualizations**: Auto-generated charts (bar/line) based on data
+- **Session Management**: Automatic cleanup of uploaded files after 2 hours
+- **Docker Support**: Full Docker setup for development and production
+
+## Tech Stack
+
+### Frontend
+- **React** 18 with TypeScript
+- **Vite** for blazing fast builds
+- **Tailwind CSS** for styling
+- **Recharts** for data visualization
+- **Framer Motion** for animations
+
+### Backend
+- **FastAPI** for high-performance API
+- **DuckDB** for efficient CSV querying
+- **OpenAI** for natural language processing
+- **Pydantic** for data validation
+- **APScheduler** for background tasks
+
+## Quick Start
+
+### Prerequisites
+
+- Docker & Docker Compose (recommended)
+- OR: Node.js 18+ and Python 3.11+ (for local development)
+- OpenAI API Key
+
+### 1. Clone and Setup
 
 ```bash
-# Start dev server
+git clone <your-repo>
+cd data-driven-insight-assistant-agoda
+
+# Copy environment file
+cp .env.example .env
+
+# Edit .env and add your OpenAI API key
+# OPENAI_API_KEY=sk-your-key-here
+```
+
+### 2. Start with Docker (Recommended)
+
+#### Development Mode (with hot-reload)
+
+```bash
+docker-compose -f docker-compose.dev.yml up
+```
+
+- Frontend: http://localhost:5173
+- Backend: http://localhost:8000
+- API Docs: http://localhost:8000/docs
+
+#### Production Mode
+
+```bash
+docker-compose -f docker-compose.prod.yml up
+```
+
+- Frontend: http://localhost:8080
+- Backend: http://localhost:8000
+
+### 3. Start Without Docker
+
+#### Backend
+
+```bash
+cd backend
+pip install -r requirements.txt
+cp .env.example .env
+# Add your OpenAI API key to .env
+python -m app.main
+```
+
+#### Frontend
+
+```bash
+npm install
 npm run dev
 ```
 
-The application will be available at `http://localhost:5173` (or next available port)
+## Usage
 
-### Production Build
+1. **Upload CSV**: Click "Upload CSV" and select your data file
+2. **Ask Questions**: Type natural language questions like:
+   - "Show me the top 5 hotels by revenue"
+   - "What's the average booking value by country?"
+   - "Count bookings per day last month"
+3. **View Results**: See results in table format, charts, or raw SQL
+
+## Project Structure
+
+```
+.
+├── backend/                # Backend API
+│   ├── app/
+│   │   ├── main.py        # FastAPI app
+│   │   ├── config.py      # Configuration
+│   │   ├── models.py      # Pydantic models
+│   │   ├── routers/       # API endpoints
+│   │   ├── services/      # Business logic
+│   │   └── utils/         # Utilities
+│   ├── uploads/           # Temporary CSV storage
+│   ├── Dockerfile
+│   └── requirements.txt
+│
+├── src/                   # Frontend
+│   ├── api/              # API client
+│   ├── types/            # TypeScript types
+│   ├── components/       # UI components
+│   ├── config/           # Configuration
+│   └── App.tsx           # Main app
+│
+├── docker-compose.yml    # All services
+├── docker-compose.dev.yml   # Development
+├── docker-compose.prod.yml  # Production
+├── DOCKER_SETUP.md       # Docker guide
+└── MIGRATION_GUIDE.md    # Migration details
+```
+
+## API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/health` | Health check |
+| POST | `/api/upload` | Upload CSV file |
+| GET | `/api/sessions/{id}/schema` | Get table schema |
+| POST | `/api/query` | Natural language query |
+| POST | `/api/execute-sql` | Execute raw SQL |
+| DELETE | `/api/sessions/{id}` | Delete session |
+
+Full API documentation: http://localhost:8000/docs
+
+## Configuration
+
+### Environment Variables
+
+**Backend** (`backend/.env`):
+```env
+OPENAI_API_KEY=sk-...          # Required
+OPENAI_MODEL=gpt-4o-mini       # Optional
+SESSION_TTL_HOURS=2            # Optional
+MAX_FILE_SIZE_MB=100           # Optional
+```
+
+**Frontend** (`.env.local`):
+```env
+VITE_API_URL=http://localhost:8000
+```
+
+## Development
+
+### Backend Development
 
 ```bash
-# Build for production
-npm run build
+cd backend
+pip install -r requirements.txt
 
-# Preview production build
-npm run preview
+# Run with hot-reload
+python -m app.main
+
+# Or with uvicorn directly
+uvicorn app.main:app --reload
 ```
 
-## 📖 Usage Guide
+### Frontend Development
 
-### 1. Setup
-1. Open the app in your browser
-2. Enter your **OpenAI API key** in the top-right input field
-3. Select your preferred model (gpt-4o-mini recommended for cost)
-
-### 2. Upload Data
-1. Click **"Choose File"** in the left panel
-2. Select a CSV file from your computer
-3. Wait for the success message: "Loaded X rows, Y columns"
-4. Review the schema in the **"Schema & Hints"** section
-
-### 3. Ask Questions
-
-**Example Questions:**
-```
-• Show me the top 5 hotels by revenue
-• What's the average rating by country?
-• Count bookings per day in 2024
-• Sum total revenue by channel
-• List all unique categories
-• Show bookings grouped by month
+```bash
+npm install
+npm run dev
 ```
 
-**Pro Tips:**
-- Use actual column names from your schema
-- Start with simple questions like "Show all data"
-- Include keywords: top, count, sum, average, group by
-- Be specific: "top 10 by revenue" vs "show hotels"
+### Docker Development
 
-### 4. View Results
-- **Table Tab** - View data in a sortable table
-- **Chart Tab** - See automatic visualizations (bar/line charts)
-- **SQL Tab** - View, edit, and run the generated SQL
+```bash
+# Start dev environment
+docker-compose -f docker-compose.dev.yml up
 
-### 5. Export Data
-- Click **"Download CSV"** in the Table tab to export results
+# View logs
+docker-compose logs -f backend-dev
 
-## 🎨 Chart Colors
-
-The app uses an 8-color palette that automatically cycles for multiple data series:
-
-1. 🔵 Blue (#3b82f6)
-2. 🟢 Green (#10b981)
-3. 🟠 Orange (#f59e0b)
-4. 🟣 Purple (#8b5cf6)
-5. 🔴 Red (#ef4444)
-6. 🔷 Teal (#14b8a6)
-7. 🩷 Pink (#ec4899)
-8. 💙 Indigo (#6366f1)
-
-## 🛠️ Tech Stack
-
-### Frontend
-- **React 18.3** - UI framework with hooks
-- **TypeScript 5.4** - Type safety and better DX
-- **Vite 5.2** - Lightning-fast build tool
-- **Tailwind CSS 3.4** - Utility-first styling
-
-### UI Components
-- **shadcn/ui** - Beautiful, accessible components
-- **Radix UI** - Unstyled, accessible primitives
-- **Lucide React** - Icon library
-- **Framer Motion** - Smooth animations
-
-### Data Processing
-- **sql.js 1.10** - SQLite compiled to WebAssembly
-- **PapaParse 5.4** - Fast CSV parser
-- **Recharts 2.12** - Composable charting library
-
-### AI Integration
-- **OpenAI API** - GPT models for natural language to SQL
-
-## 📁 Project Structure
-
-```
-├── src/
-│   ├── App.tsx              # Main application component
-│   ├── main.tsx             # Application entry point
-│   ├── index.css            # Global Tailwind styles
-│   ├── config/
-│   │   └── prompts.ts       # AI prompts and constants
-│   ├── components/
-│   │   └── ui/              # UI components (Button, Card, etc.)
-│   └── lib/
-│       └── utils.ts         # Utility functions (cn helper)
-├── docs/
-│   └── API_REQUEST.md       # OpenAI API request documentation
-├── public/                  # Static assets
-├── index.html               # HTML entry point
-├── vite.config.ts           # Vite configuration
-├── tsconfig.json            # TypeScript configuration
-├── tailwind.config.js       # Tailwind CSS configuration
-├── postcss.config.js        # PostCSS configuration
-└── package.json             # Dependencies and scripts
+# Rebuild
+docker-compose up --build
 ```
 
-## ⚙️ Configuration
+## Testing
 
-### Customizing AI Prompts
+### Manual Testing Flow
 
-Edit `src/config/prompts.ts` to modify:
-- System prompt for query generation
-- Chart color palette
-- Welcome message
+1. Start the application
+2. Upload a CSV file
+3. Ask questions:
+   - "Show all data"
+   - "Top 5 by revenue"
+   - "Count by category"
+4. Verify:
+   - CSV uploads successfully
+   - Questions generate SQL
+   - Results display correctly
+   - Charts render properly
 
-### Supported Models
+### API Testing
 
-The app supports these OpenAI models:
-- `gpt-4o-mini` (Recommended - fast and cost-effective)
-- `gpt-4o` (More capable, higher cost)
-- `gpt-4.1-mini` (Latest mini model)
+Use the interactive docs at http://localhost:8000/docs to test endpoints directly.
 
-## 🐛 Troubleshooting
+## Security
 
-### Common Issues
+- **API Key Protection**: OpenAI key stored only on backend, never exposed to browser
+- **SQL Injection Prevention**: Parameterized queries with DuckDB
+- **File Upload Limits**: Max 100MB file size (configurable)
+- **Session Expiration**: Automatic cleanup after 2 hours
+- **CORS Configuration**: Restricted origins in production
 
-**"Table not found" Error**
-- ✅ Make sure you've uploaded a CSV file first
-- ✅ Wait for "Loaded X rows" confirmation message
+## Performance
 
-**"AI did not generate SQL" Error**
-- ✅ Check your OpenAI API key is correct
-- ✅ Rephrase your question to be more specific
-- ✅ Try simpler questions first
+- **DuckDB**: Queries CSV directly without loading into memory
+- **Fast Processing**: Can handle 100MB+ CSV files efficiently
+- **Session Management**: Automatic cleanup prevents storage bloat
+- **Docker Optimization**: Multi-stage builds for small images
 
-**Empty Screen**
-- ✅ Check browser console (F12) for errors
-- ✅ Refresh the page
-- ✅ Clear browser cache and restart dev server
+## Documentation
 
-**Charts Not Showing**
-- ✅ Ensure query returns at least 2 columns
-- ✅ At least one column should be numeric
-- ✅ Try queries with aggregations (COUNT, SUM, AVG)
+- [Docker Setup Guide](./DOCKER_SETUP.md) - Detailed Docker instructions
+- [Migration Guide](./MIGRATION_GUIDE.md) - Client-side to backend migration
+- [Backend README](./backend/README.md) - Backend-specific documentation
+- [API Documentation](http://localhost:8000/docs) - Interactive API docs
 
-## 🔐 Privacy & Security
+## Troubleshooting
 
-- ✅ **All data stays in your browser** - CSV files never leave your machine
-- ✅ **No backend servers** - Everything runs client-side
-- ✅ **API key stored locally** - Not persisted, only kept in memory
-- ⚠️ **OpenAI sees**: Your question + table schema (column names and sample values)
-- ⚠️ **OpenAI does NOT see**: Your actual data rows
+### Backend won't start
+```bash
+# Check logs
+docker-compose logs backend
 
-### What Gets Sent to OpenAI?
+# Verify OpenAI key is set
+grep OPENAI_API_KEY .env
+```
 
-For complete transparency about the API requests, see [API Request Documentation](docs/API_REQUEST.md) which includes:
-- Exact request/response structure
-- Real examples
-- Privacy analysis
-- Data flow diagram
+### Frontend can't connect to backend
+```bash
+# Check backend health
+curl http://localhost:8000/api/health
 
-**Quick Summary:**
-- **Sent:** Your question, column names, data types, one sample value per column
-- **NOT sent:** Full CSV content, all data rows, your API key (body), personal info
+# Verify VITE_API_URL
+cat .env.local
+```
 
-## 🤝 Contributing
+### CSV upload fails
+- Check file size (max 100MB by default)
+- Verify CSV format (must have header row)
+- Check backend logs for errors
 
-Contributions are welcome! This is a modern React + TypeScript project with:
-- ESLint for code quality
-- Prettier for formatting (recommended)
-- TypeScript for type safety
+## Contributing
 
-## 📄 License
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
 
-MIT License - feel free to use this project for personal or commercial purposes.
+## License
 
-## 🙏 Acknowledgments
+MIT License
 
-- Built with [Vite](https://vitejs.dev/)
-- UI components from [shadcn/ui](https://ui.shadcn.com/)
-- Powered by [OpenAI](https://openai.com/)
-- SQLite via [sql.js](https://github.com/sql-js/sql.js)
+## Support
+
+For issues or questions:
+- Open an issue on GitHub
+- Check the documentation files
+- Review API docs at `/docs`
+
+---
+
+Built with ❤️ using React, FastAPI, and DuckDB
