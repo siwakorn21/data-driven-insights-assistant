@@ -62,6 +62,12 @@ export default function App() {
   const [lastSQL, setLastSQL] = useState<string>("");
   const [chartHint, setChartHint] = useState<ChartHint>(null);
 
+  // Data preview state
+  const [previewData, setPreviewData] = useState<{ columns: string[]; rows: RowData[] }>({
+    columns: [],
+    rows: []
+  });
+
   const [clarContext] = useState<Record<string, any>>({});
 
   // -------- CSV Upload --------
@@ -88,6 +94,13 @@ export default function App() {
         return `- ${col.name} (${col.type}) e.g. ${sample}`;
       });
       setSchemaText(schemaLines.join("\n"));
+
+      // Fetch preview data (first 50 rows)
+      const previewResponse = await apiClient.executeSQL({
+        session_id: response.session_id,
+        sql: 'SELECT * FROM "data" LIMIT 50'
+      });
+      setPreviewData({ columns: previewResponse.columns, rows: previewResponse.rows });
 
       setMessages((m) => [
         ...m,
@@ -318,6 +331,43 @@ export default function App() {
               </div>
             </CardContent>
           </Card>
+
+          {previewData.columns.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Database className="w-5 h-5"/> Data Preview (First 50 rows)
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-auto max-h-96 border rounded-md">
+                  <table className="w-full text-xs">
+                    <thead className="sticky top-0 bg-slate-100 border-b">
+                      <tr>
+                        {previewData.columns.map((col) => (
+                          <th key={col} className="text-left p-2 font-semibold">{col}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {previewData.rows.map((row: RowData, i: number) => (
+                        <tr key={i} className="odd:bg-white even:bg-slate-50 border-b">
+                          {previewData.columns.map((col) => (
+                            <td key={col} className="p-2">
+                              {String(row[col] ?? "")}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="text-xs text-slate-500 mt-2">
+                  Showing up to 50 rows. Ask questions to analyze specific data.
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {/* Right column: Chat + Results */}
