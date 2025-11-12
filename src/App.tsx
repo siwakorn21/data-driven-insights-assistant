@@ -20,7 +20,7 @@ import {
   LineChart,
   Line
 } from "recharts";
-import { CHART_COLORS, WELCOME_MESSAGE } from "@/config/prompts";
+import { CHART_COLORS, WELCOME_MESSAGE } from "@/config/constants";
 import { apiClient } from "@/api";
 import type { ColumnSchema } from "@/types/api";
 
