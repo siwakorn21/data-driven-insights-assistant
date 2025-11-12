@@ -93,9 +93,14 @@ async def execute_query(request: QueryRequest):
         # Execute SQL if provided
         sql = llm_response.get("sql")
         if not sql:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="LLM did not generate SQL"
+            # No SQL means conversational response (e.g., greetings)
+            # Return explanation only without executing any query
+            return QueryResponse(
+                sql=None,
+                columns=[],
+                rows=[],
+                ask_clarification=False,
+                explanation=llm_response.get("explanation", "I understand. How can I help you with your data?")
             )
 
         # Execute SQL with DuckDB

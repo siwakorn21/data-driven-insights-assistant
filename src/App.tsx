@@ -159,11 +159,24 @@ export default function App() {
       else if (response.error) {
         setError(response.error);
       }
-      // Handle SQL result
+      // Handle SQL result or conversational response
       else {
         const { sql, columns, rows, explanation } = response;
 
-        if (!sql || !columns || !rows) {
+        // Conversational response (no SQL generated, just explanation)
+        if (!sql) {
+          setMessages((m) => [
+            ...m,
+            {
+              role: "assistant",
+              content: explanation || "I'm here to help! Ask me about your data."
+            }
+          ]);
+          return;
+        }
+
+        // SQL result
+        if (!columns || !rows) {
           throw new Error("Invalid response from backend");
         }
 
