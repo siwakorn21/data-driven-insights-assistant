@@ -21,15 +21,16 @@ class DuckDBService:
         """
         conn = duckdb.connect(':memory:')
         try:
-            # Get row count
-            row_count = conn.execute(
+            # Get row count - convert to Python int
+            row_count = int(conn.execute(
                 f"SELECT COUNT(*) FROM read_csv_auto('{csv_path}')"
-            ).fetchone()[0]
+            ).fetchone()[0])
 
-            # Get column count
-            column_count = conn.execute(
-                f"SELECT COUNT(*) FROM (DESCRIBE SELECT * FROM read_csv_auto('{csv_path}'))"
-            ).fetchone()[0]
+            # Get column count - DESCRIBE returns a row for each column
+            describe_result = conn.execute(
+                f"DESCRIBE SELECT * FROM read_csv_auto('{csv_path}')"
+            ).fetchall()
+            column_count = len(describe_result)
 
             return row_count, column_count
         finally:
@@ -57,17 +58,25 @@ class DuckDBService:
                 f"SELECT * FROM read_csv_auto('{csv_path}') LIMIT 1"
             ).df()
 
-            # Get row count
-            row_count = conn.execute(
+            # Get row count - convert to Python int
+            row_count = int(conn.execute(
                 f"SELECT COUNT(*) FROM read_csv_auto('{csv_path}')"
-            ).fetchone()[0]
+            ).fetchone()[0])
 
             # Build column schema list
             columns = []
             for _, row in schema_df.iterrows():
                 col_name = row['column_name']
                 col_type = row['column_type']
-                sample_value = sample_df[col_name].iloc[0] if not sample_df.empty else None
+
+                # Get sample value and convert numpy types to Python native types
+                if not sample_df.empty:
+                    sample_value = sample_df[col_name].iloc[0]
+                    # Convert numpy types to Python native types for JSON serialization
+                    if hasattr(sample_value, 'item'):
+                        sample_value = sample_value.item()
+                else:
+                    sample_value = None
 
                 columns.append(ColumnSchema(
                     name=col_name,
@@ -115,9 +124,15 @@ class DuckDBService:
             # Execute user query
             result = conn.execute(sql).df()
 
-            # Convert to list of dicts
+            # Convert to list of dicts and handle numpy types
             columns = list(result.columns)
             rows = result.to_dict('records')
+
+            # Convert numpy types to Python native types for JSON serialization
+            for row in rows:
+                for key, value in row.items():
+                    if hasattr(value, 'item'):
+                        row[key] = value.item()
 
             return columns, rows
         finally:

@@ -2,11 +2,9 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Upload, Send, Database, Sparkles, Bot, HelpCircle } from "lucide-react";
 import {
@@ -40,7 +38,7 @@ const head = <T,>(arr: T[], n = 5): T[] => arr.slice(0, n);
 export default function App() {
   // Session state
   const [sessionId, setSessionId] = useState<string>("");
-  const [fileName, setFileName] = useState<string>("");
+  const [, setFileName] = useState<string>("");
 
   // Data state
   const [rowCount, setRowCount] = useState<number>(0);
