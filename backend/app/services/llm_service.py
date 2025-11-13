@@ -2,9 +2,10 @@
 LLM service for natural language to SQL conversion
 """
 import json
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from openai import OpenAI
 from app.config import settings
+from app.services.query_router import QueryRouter, QueryComplexity
 
 
 # System prompt for SQL generation (from frontend prompts.ts)
@@ -87,11 +88,13 @@ Safety:
 
 
 class LLMService:
-    """Service for LLM-based SQL generation"""
+    """Service for LLM-based SQL generation with intelligent routing"""
 
     def __init__(self):
         self.client = OpenAI(api_key=settings.OPENAI_API_KEY)
         self.model = settings.OPENAI_MODEL
+        self.router = QueryRouter()
+        self.enable_routing = getattr(settings, 'ENABLE_QUERY_ROUTING', True)
 
     async def generate_sql(
         self,
@@ -143,6 +146,100 @@ Context (answers to prior clarifications):
                 "sql": None,
                 "ask_clarification": False,
                 "error": f"LLM error: {str(e)}"
+            }
+
+    async def generate_sql_with_routing(
+        self,
+        question: str,
+        schema: str,
+        schema_dict: Optional[Dict] = None,
+        context: Dict[str, Any] = None,
+        force_model: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Generate SQL with intelligent routing for production scale.
+
+        Routes queries based on complexity:
+        - SIMPLE: Template-based (free, instant)
+        - MEDIUM: GPT-3.5-turbo ($0.001 per query)
+        - COMPLEX: GPT-4 ($0.024 per query)
+
+        Args:
+            question: User's natural language question
+            schema: Formatted table schema string
+            schema_dict: Optional parsed schema dict for analysis
+            context: Additional context from previous clarifications
+            force_model: Optional model to force (for testing/A/B)
+
+        Returns:
+            Dict with sql, explanation, and routing metadata
+        """
+        if context is None:
+            context = {}
+
+        # Check if routing is enabled
+        if not self.enable_routing:
+            # Fall back to standard generation with configured model
+            return await self.generate_sql(question, schema, context)
+
+        try:
+            # Route the query
+            complexity, template_result, routing_metadata = self.router.route(
+                question=question,
+                schema=schema_dict,
+                force_model=force_model
+            )
+
+            # If template matched, return immediately (no LLM call)
+            if template_result:
+                return {
+                    "sql": template_result["sql"],
+                    "ask_clarification": False,
+                    "clarification": None,
+                    "explanation": template_result["explanation"],
+                    "routing": routing_metadata
+                }
+
+            # Determine which model to use based on complexity
+            if complexity == QueryComplexity.MEDIUM:
+                model = "gpt-3.5-turbo"
+            else:  # COMPLEX
+                model = "gpt-4"
+
+            # Construct user message
+            user_message = f"""User question: {question}
+
+Table schema (SQLite):
+{schema}
+
+Context (answers to prior clarifications):
+{json.dumps(context)}"""
+
+            # Call OpenAI API with selected model
+            response = self.client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": user_message}
+                ],
+                temperature=0.2
+            )
+
+            # Extract and parse content
+            content = response.choices[0].message.content
+            parsed = self._parse_llm_response(content)
+
+            # Add routing metadata
+            parsed["routing"] = routing_metadata
+
+            return parsed
+
+        except Exception as e:
+            return {
+                "sql": None,
+                "ask_clarification": False,
+                "error": f"LLM error: {str(e)}",
+                "routing": {"error": str(e)}
             }
 
     def _parse_llm_response(self, content: str) -> Dict[str, Any]:

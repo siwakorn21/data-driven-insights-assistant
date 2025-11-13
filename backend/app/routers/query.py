@@ -75,10 +75,16 @@ async def execute_query(request: QueryRequest):
         columns, _ = duckdb_service.get_schema(csv_path)
         schema_text = duckdb_service.format_schema_for_llm(columns)
 
-        # Call LLM to generate SQL or ask clarification
-        llm_response = await llm_service.generate_sql(
+        # Prepare schema dict for complexity analysis
+        # Convert ColumnSchema objects to dictionaries
+        columns_dict = [{"name": col.name, "type": col.type} for col in columns]
+        schema_dict = {"columns": columns_dict}
+
+        # Call LLM with intelligent routing (production scale)
+        llm_response = await llm_service.generate_sql_with_routing(
             question=request.question,
             schema=schema_text,
+            schema_dict=schema_dict,
             context=request.context
         )
 

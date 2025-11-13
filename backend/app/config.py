@@ -12,6 +12,12 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str
     OPENAI_MODEL: str = "gpt-4o-mini"
 
+    # Query Routing Configuration (Production Scale)
+    ENABLE_QUERY_ROUTING: bool = True  # Enable intelligent routing
+    DEFAULT_MODEL_FOR_SIMPLE: str = "template"  # Use templates for simple queries
+    DEFAULT_MODEL_FOR_MEDIUM: str = "gpt-3.5-turbo"  # Use GPT-3.5 for medium
+    DEFAULT_MODEL_FOR_COMPLEX: str = "gpt-4"  # Use GPT-4 for complex
+
     # CORS Configuration
     CORS_ORIGINS: str = "http://localhost:5173,http://localhost:8080"
 
