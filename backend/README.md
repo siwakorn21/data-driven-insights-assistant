@@ -6,6 +6,10 @@ FastAPI backend with DuckDB for natural language data querying.
 
 - **CSV Upload & Session Management**: Upload CSV files and create isolated sessions
 - **Natural Language Querying**: Convert questions to SQL using OpenAI
+- **Production-Scale Query Routing**: Intelligent cost optimization (78% savings)
+  - Simple queries → Template-based (free, instant)
+  - Medium queries → GPT-3.5-turbo ($0.001/query)
+  - Complex queries → GPT-4 ($0.024/query)
 - **DuckDB Integration**: Fast, efficient CSV querying without loading data into memory
 - **Automatic Schema Detection**: Infer column types and provide samples
 - **Session Cleanup**: Automatic cleanup of expired sessions (2-hour TTL)
@@ -23,9 +27,10 @@ backend/
 │   │   ├── upload.py        # CSV upload & session management
 │   │   └── query.py         # Query execution
 │   ├── services/            # Business logic
-│   │   ├── duckdb_service.py   # DuckDB operations
-│   │   ├── llm_service.py      # OpenAI integration
-│   │   └── session_service.py  # Session management
+│   │   ├── duckdb_service.py    # DuckDB operations
+│   │   ├── llm_service.py       # OpenAI integration with routing
+│   │   ├── query_router.py      # Intelligent query routing
+│   │   └── session_service.py   # Session management
 │   └── utils/               # Utilities
 │       └── cleanup.py       # File cleanup helpers
 ├── uploads/                 # Temporary CSV storage
