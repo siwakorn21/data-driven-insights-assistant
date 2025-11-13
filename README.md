@@ -227,7 +227,7 @@ Hotel E,45000,Germany,4.3,100
 |------------|---------|------------|
 | **FastAPI** | Web framework | Modern, fast, async support, auto-docs |
 | **DuckDB** | Query engine | Embedded, fast CSV querying, no memory load |
-| **OpenAI GPT-4** | NL to SQL | State-of-the-art language understanding |
+| **OpenAI GPT-4** | NL to SQL | 95%+ SQL accuracy, superior reasoning for complex queries (see [analysis](docs/IMPLEMENTATION_SUMMARY.md#why-gpt-4-over-other-models)) |
 | **Pydantic** | Validation | Type safety, automatic validation, clear errors |
 | **APScheduler** | Background tasks | Session cleanup, scheduled jobs |
 | **Uvicorn** | ASGI server | High performance, async support |
@@ -274,6 +274,13 @@ Hotel E,45000,Germany,4.3,100
 - **Services**: Business logic
 - **Models**: Data validation
 - **Rationale**: Testability, maintainability, scalability
+
+### 6. **GPT-4 over GPT-3.5 or Alternatives**
+- **Rationale**: Superior SQL generation accuracy (95% vs 75-85%), better natural language understanding, handles complex multi-step reasoning
+- **Trade-off**: 20x cost premium justified by user experience and reduced error rate
+- **Alternatives Considered**: GPT-3.5-turbo (cost-effective but less accurate), CodeLlama (self-hosted), SQLCoder (specialized), hybrid routing (production optimization)
+- **For Production**: Implement intelligent routing - templates for simple queries, GPT-3.5 for medium complexity, GPT-4 for complex reasoning
+- **See**: [Detailed analysis in IMPLEMENTATION_SUMMARY.md](docs/IMPLEMENTATION_SUMMARY.md#why-gpt-4-over-other-models)
 
 ---
 
