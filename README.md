@@ -1,315 +1,475 @@
-# Data-Driven Insights Assistant
-
-A full-stack application that enables natural language querying of CSV data using OpenAI and DuckDB.
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                         Browser                              │
-│  ┌────────────────────────────────────────────────────┐    │
-│  │  React + TypeScript + Vite                         │    │
-│  │  - Upload CSV interface                            │    │
-│  │  - Natural language chat                           │    │
-│  │  - Results visualization (tables + charts)         │    │
-│  └──────────────────┬─────────────────────────────────┘    │
-└─────────────────────┼──────────────────────────────────────┘
-                      │ REST API
-                      │
-┌─────────────────────▼──────────────────────────────────────┐
-│                    Backend Server                           │
-│  ┌────────────────────────────────────────────────────┐    │
-│  │  FastAPI + Python                                  │    │
-│  │  ├── CSV Upload & Session Management              │    │
-│  │  ├── DuckDB for SQL Execution                     │    │
-│  │  ├── OpenAI for NL → SQL Conversion              │    │
-│  │  └── Background Cleanup Tasks                     │    │
-│  └──────────────────┬─────────────────────────────────┘    │
-└─────────────────────┼──────────────────────────────────────┘
-                      │
-                      ▼
-              ┌──────────────┐
-              │  OpenAI API  │
-              └──────────────┘
-```
-
-## Features
-
-- **Natural Language Queries**: Ask questions in plain English
-- **Automatic SQL Generation**: Powered by OpenAI GPT models
-- **Fast CSV Processing**: DuckDB queries data directly without loading into memory
-- **Smart Clarifications**: System asks for clarification when needed
-- **Interactive Visualizations**: Auto-generated charts (bar/line) based on data
-- **Session Management**: Automatic cleanup of uploaded files after 2 hours
-- **Docker Support**: Full Docker setup for development and production
-
-## Tech Stack
-
-### Frontend
-- **React** 18 with TypeScript
-- **Vite** for blazing fast builds
-- **Tailwind CSS** for styling
-- **Recharts** for data visualization
-- **Framer Motion** for animations
-
-### Backend
-- **FastAPI** for high-performance API
-- **DuckDB** for efficient CSV querying
-- **OpenAI** for natural language processing
-- **Pydantic** for data validation
-- **APScheduler** for background tasks
-
-## Quick Start
-
-### Prerequisites
-
-- Docker & Docker Compose (recommended)
-- OR: Node.js 18+ and Python 3.11+ (for local development)
-- OpenAI API Key
-
-### 1. Clone and Setup
-
-```bash
-git clone <your-repo>
-cd data-driven-insight-assistant-agoda
-
-# Copy environment file
-cp .env.example .env
-
-# Edit .env and add your OpenAI API key
-# OPENAI_API_KEY=sk-your-key-here
-```
-
-### 2. Start with Docker (Recommended)
-
-#### Development Mode (with hot-reload)
-
-```bash
-docker-compose -f docker-compose.dev.yml up
-```
-
-- Frontend: http://localhost:5173
-- Backend: http://localhost:8000
-- API Docs: http://localhost:8000/docs
-
-#### Production Mode
-
-```bash
-docker-compose -f docker-compose.prod.yml up
-```
-
-- Frontend: http://localhost:8080
-- Backend: http://localhost:8000
-
-### 3. Start Without Docker
-
-#### Backend
-
-```bash
-cd backend
-pip install -r requirements.txt
-cp .env.example .env
-# Add your OpenAI API key to .env
-python -m app.main
-```
-
-#### Frontend
-
-```bash
-npm install
-npm run dev
-```
-
-## Usage
-
-1. **Upload CSV**: Click "Upload CSV" and select your data file
-2. **Ask Questions**: Type natural language questions like:
-   - "Show me the top 5 hotels by revenue"
-   - "What's the average booking value by country?"
-   - "Count bookings per day last month"
-3. **View Results**: See results in table format, charts, or raw SQL
-
-## Project Structure
-
-```
-.
-├── backend/                # Backend API
-│   ├── app/
-│   │   ├── main.py        # FastAPI app
-│   │   ├── config.py      # Configuration
-│   │   ├── models.py      # Pydantic models
-│   │   ├── routers/       # API endpoints
-│   │   ├── services/      # Business logic
-│   │   └── utils/         # Utilities
-│   ├── uploads/           # Temporary CSV storage
-│   ├── Dockerfile
-│   └── requirements.txt
-│
-├── src/                   # Frontend
-│   ├── api/              # API client
-│   ├── types/            # TypeScript types
-│   ├── components/       # UI components
-│   ├── config/           # Configuration
-│   └── App.tsx           # Main app
-│
-├── docker-compose.yml    # All services
-├── docker-compose.dev.yml   # Development
-├── docker-compose.prod.yml  # Production
-├── DOCKER_SETUP.md       # Docker guide
-└── MIGRATION_GUIDE.md    # Migration details
-```
-
-## API Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/health` | Health check |
-| POST | `/api/upload` | Upload CSV file |
-| GET | `/api/sessions/{id}/schema` | Get table schema |
-| POST | `/api/query` | Natural language query |
-| POST | `/api/execute-sql` | Execute raw SQL |
-| DELETE | `/api/sessions/{id}` | Delete session |
-
-Full API documentation: http://localhost:8000/docs
-
-## Configuration
-
-### Environment Variables
-
-**Backend** (`backend/.env`):
-```env
-OPENAI_API_KEY=sk-...          # Required
-OPENAI_MODEL=gpt-4o-mini       # Optional
-SESSION_TTL_HOURS=2            # Optional
-MAX_FILE_SIZE_MB=100           # Optional
-```
-
-**Frontend** (`.env.local`):
-```env
-VITE_API_URL=http://localhost:8000
-```
-
-## Development
-
-### Backend Development
-
-```bash
-cd backend
-pip install -r requirements.txt
-
-# Run with hot-reload
-python -m app.main
-
-# Or with uvicorn directly
-uvicorn app.main:app --reload
-```
-
-### Frontend Development
-
-```bash
-npm install
-npm run dev
-```
-
-### Docker Development
-
-```bash
-# Start dev environment
-docker-compose -f docker-compose.dev.yml up
-
-# View logs
-docker-compose logs -f backend-dev
-
-# Rebuild
-docker-compose up --build
-```
-
-## Testing
-
-### Manual Testing Flow
-
-1. Start the application
-2. Upload a CSV file
-3. Ask questions:
-   - "Show all data"
-   - "Top 5 by revenue"
-   - "Count by category"
-4. Verify:
-   - CSV uploads successfully
-   - Questions generate SQL
-   - Results display correctly
-   - Charts render properly
-
-### API Testing
-
-Use the interactive docs at http://localhost:8000/docs to test endpoints directly.
-
-## Security
-
-- **API Key Protection**: OpenAI key stored only on backend, never exposed to browser
-- **SQL Injection Prevention**: Parameterized queries with DuckDB
-- **File Upload Limits**: Max 100MB file size (configurable)
-- **Session Expiration**: Automatic cleanup after 2 hours
-- **CORS Configuration**: Restricted origins in production
-
-## Performance
-
-- **DuckDB**: Queries CSV directly without loading into memory
-- **Fast Processing**: Can handle 100MB+ CSV files efficiently
-- **Session Management**: Automatic cleanup prevents storage bloat
-- **Docker Optimization**: Multi-stage builds for small images
-
-## Documentation
-
-- [Docker Setup Guide](./DOCKER_SETUP.md) - Detailed Docker instructions
-- [Migration Guide](./MIGRATION_GUIDE.md) - Client-side to backend migration
-- [Backend README](./backend/README.md) - Backend-specific documentation
-- [API Documentation](http://localhost:8000/docs) - Interactive API docs
-
-## Troubleshooting
-
-### Backend won't start
-```bash
-# Check logs
-docker-compose logs backend
-
-# Verify OpenAI key is set
-grep OPENAI_API_KEY .env
-```
-
-### Frontend can't connect to backend
-```bash
-# Check backend health
-curl http://localhost:8000/api/health
-
-# Verify VITE_API_URL
-cat .env.local
-```
-
-### CSV upload fails
-- Check file size (max 100MB by default)
-- Verify CSV format (must have header row)
-- Check backend logs for errors
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
-
-## License
-
-MIT License
-
-## Support
-
-For issues or questions:
-- Open an issue on GitHub
-- Check the documentation files
-- Review API docs at `/docs`
+# 🚀 Data-Driven Insights Assistant
+
+> An AI-powered data analysis platform that transforms natural language questions into SQL queries and visualizations.
+
+[![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)](https://www.docker.com/)
+[![Python](https://img.shields.io/badge/Python-3.11-green.svg)](https://www.python.org/)
+[![React](https://img.shields.io/badge/React-18-blue.svg)](https://reactjs.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.104-green.svg)](https://fastapi.tiangolo.com/)
+[![DuckDB](https://img.shields.io/badge/DuckDB-0.9-yellow.svg)](https://duckdb.org/)
 
 ---
 
-Built with ❤️ using React, FastAPI, and DuckDB
+## 📖 Table of Contents
+
+- [Demo](#-demo)
+- [Overview](#-overview)
+- [Project Highlights](#-project-highlights)
+- [Architecture](#%EF%B8%8F-architecture)
+- [Quick Start](#-quick-start)
+- [Usage Examples](#-usage-examples)
+- [Technical Stack](#-technology-stack)
+- [Key Design Decisions](#-key-design-decisions)
+- [Project Structure](#-project-structure)
+- [Documentation](#-documentation)
+- [Development](#%EF%B8%8F-development)
+
+---
+
+## 🎥 Demo
+
+### Live Application
+- **Frontend**: http://localhost:5173
+- **Backend API**: http://localhost:8000
+- **API Docs**: http://localhost:8000/docs (Interactive Swagger UI)
+
+### Demo Workflow
+
+1. **Upload CSV** → Application automatically infers schema and displays data preview
+2. **Ask Questions** → "Top 3 hotels by revenue" (natural language)
+3. **Get Results** → AI generates SQL, executes query, shows results in table and charts
+4. **Conversational** → Say "Hello" to get helpful suggestions instead of queries
+
+**Example Interaction:**
+```
+User: "Top 5 hotels by revenue"
+AI:   Generates → SELECT * FROM "data" ORDER BY "revenue" DESC LIMIT 5
+      Executes → Returns data + bar chart visualization
+```
+
+---
+
+## 📖 Overview
+
+Data-Driven Insights Assistant is a production-ready full-stack application that enables non-technical users to analyze CSV data through natural language queries. Built with modern technologies and best practices, it showcases enterprise-grade architecture suitable for Agoda's data-driven environment.
+
+### ✨ Key Features
+
+- **🤖 AI-Powered Query Generation**: Natural language to SQL using OpenAI GPT-4
+- **📊 Automatic Visualizations**: Smart chart selection (bar/line) based on data types
+- **🔍 Live Data Preview**: First 50 rows displayed immediately after upload
+- **💬 Conversational AI**: Recognizes greetings and provides contextual help
+- **🎯 Intelligent Clarifications**: Asks follow-up questions for ambiguous queries
+- **📥 Export Results**: Download query results as CSV
+- **🔒 Secure Sessions**: UUID-based isolation with automatic cleanup (2-hour TTL)
+- **⚡ Real-time Updates**: Hot-reload in development mode
+- **🎨 Modern UI**: Responsive design with Tailwind CSS and Framer Motion
+
+---
+
+## 🏆 Project Highlights
+
+### Why This Architecture?
+
+**Problem**: Users need to analyze data quickly without SQL knowledge, but client-side solutions don't scale.
+
+**Solution**: Full-stack architecture with intelligent backend processing.
+
+### Technical Achievements
+
+✅ **Scalable Backend**: DuckDB processes CSV files directly without loading into memory  
+✅ **Type Safety**: Full TypeScript frontend + Pydantic backend validation  
+✅ **Security First**: API keys never exposed to client, session isolation  
+✅ **Production Ready**: Docker containerization, environment configs, error handling  
+✅ **Clean Code**: Separation of concerns, service layer pattern, clear project structure  
+✅ **Developer Experience**: Hot-reload, comprehensive logging, API documentation  
+
+### Performance Considerations
+
+- **DuckDB** over in-memory databases → Handles large CSVs efficiently
+- **Session management** → Automatic cleanup prevents storage bloat
+- **Lazy loading** → Only fetch necessary data (50-row preview, pagination)
+- **Smart caching** → Schema inference cached per session
+
+---
+
+## 🏗️ Architecture
+
+### System Design
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                    Frontend (React + Vite)                       │
+│  ┌────────────────────────────────────────────────────────────┐  │
+│  │  Components:                                               │  │
+│  │  • Chat Interface with Message History                     │  │
+│  │  • CSV Upload with Validation                              │  │
+│  │  • Data Preview Table (50 rows)                            │  │
+│  │  • Dynamic Chart Rendering (Bar/Line)                      │  │
+│  │  • Query Result Table with Export                          │  │
+│  │  • SQL Editor with Syntax Highlighting                     │  │
+│  └────────────────────────────────────────────────────────────┘  │
+└────────────────────────────┬─────────────────────────────────────┘
+                             │ REST API (JSON)
+┌────────────────────────────┴─────────────────────────────────────┐
+│                    Backend (FastAPI + DuckDB)                    │
+│  ┌────────────────────────────────────────────────────────────┐  │
+│  │  API Layer (FastAPI Routers):                              │  │
+│  │  • POST /api/upload         → Upload CSV, create session   │  │
+│  │  • GET  /api/sessions/{id}  → Get schema & metadata        │  │
+│  │  • POST /api/query          → NL → SQL → Execute           │  │
+│  │  • POST /api/execute-sql    → Direct SQL execution         │  │
+│  │  • GET  /api/health         → Health check                 │  │
+│  ├────────────────────────────────────────────────────────────┤  │
+│  │  Service Layer:                                             │  │
+│  │  • LLMService      → OpenAI integration, prompt engineering │  │
+│  │  • DuckDBService   → Query execution, schema inference     │  │
+│  │  • SessionService  → File management, cleanup scheduler    │  │
+│  └────────────────────────────────────────────────────────────┘  │
+│                                                                   │
+│  Background Tasks: APScheduler → Cleanup expired sessions        │
+└───────────────────────────────────────────────────────────────────┘
+```
+
+### Data Flow
+
+```
+1. Upload CSV → Saved to uploads/ → UUID session created
+2. Schema inference → DuckDB DESCRIBE → Column types + samples
+3. User query → LLM (GPT-4) → SQL generation
+4. SQL validation → DuckDB execution → Results
+5. Auto-charting → Detect X/Y columns → Render visualization
+```
+
+---
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- **Docker Desktop** ([Download](https://www.docker.com/products/docker-desktop))
+- **OpenAI API Key** ([Get one](https://platform.openai.com/api-keys))
+- **Available Ports**: 8000, 5173
+
+### Setup (3 Steps)
+
+```bash
+# 1. Clone and navigate
+git clone <repository-url>
+cd data-driven-insight-assistant-agoda
+
+# 2. Configure environment
+cp .env.example .env
+# Edit .env and add: OPENAI_API_KEY=sk-your-key-here
+
+# 3. Start services
+docker-compose -f docker-compose.dev.yml up
+```
+
+### Access Points
+
+| Service | URL | Description |
+|---------|-----|-------------|
+| Frontend | http://localhost:5173 | Main application UI |
+| Backend | http://localhost:8000 | API server |
+| API Docs | http://localhost:8000/docs | Interactive Swagger UI |
+
+### Test It Out
+
+1. Open http://localhost:5173
+2. Upload `examples/test_data.csv`
+3. Try: **"Top 3 hotels by revenue"**
+4. View table + chart results
+
+---
+
+## 📊 Usage Examples
+
+### Natural Language Queries
+
+| Query | Generated SQL | Visualization |
+|-------|---------------|---------------|
+| "Top 5 hotels by revenue" | `SELECT * FROM "data" ORDER BY "revenue" DESC LIMIT 5` | Bar chart |
+| "Average rating by country" | `SELECT "country", AVG("rating") FROM "data" GROUP BY "country"` | Bar chart |
+| "Count bookings per country" | `SELECT "country", COUNT(*) FROM "data" GROUP BY "country"` | Bar chart |
+| "Show all data" | `SELECT * FROM "data" LIMIT 50` | Table only |
+
+### Conversational AI
+
+```
+User: "Hello"
+AI:   "Hello! I'm here to help you analyze your data. 
+       You can ask me questions like:
+       • Top 5 hotels by revenue
+       • Average rating by country
+       • Count of bookings
+       
+       What would you like to know about your data?"
+```
+
+### Sample Data
+
+```csv
+hotel,revenue,country,rating,bookings
+Hotel A,50000,USA,4.5,120
+Hotel B,75000,UK,4.8,200
+Hotel C,30000,France,4.2,80
+Hotel D,95000,USA,4.9,250
+Hotel E,45000,Germany,4.3,100
+```
+
+---
+
+## 🔧 Technology Stack
+
+### Backend
+| Technology | Purpose | Why Chosen |
+|------------|---------|------------|
+| **FastAPI** | Web framework | Modern, fast, async support, auto-docs |
+| **DuckDB** | Query engine | Embedded, fast CSV querying, no memory load |
+| **OpenAI GPT-4** | NL to SQL | State-of-the-art language understanding |
+| **Pydantic** | Validation | Type safety, automatic validation, clear errors |
+| **APScheduler** | Background tasks | Session cleanup, scheduled jobs |
+| **Uvicorn** | ASGI server | High performance, async support |
+
+### Frontend
+| Technology | Purpose | Why Chosen |
+|------------|---------|------------|
+| **React 18** | UI framework | Component reusability, virtual DOM |
+| **TypeScript** | Type safety | Catch errors at compile time |
+| **Vite** | Build tool | Fast HMR, optimized builds |
+| **TailwindCSS** | Styling | Utility-first, responsive design |
+| **Recharts** | Visualization | Declarative charts, D3-based |
+| **Framer Motion** | Animations | Smooth transitions, engaging UX |
+
+### Infrastructure
+| Technology | Purpose | Why Chosen |
+|------------|---------|------------|
+| **Docker** | Containerization | Consistent environments, easy deployment |
+| **Docker Compose** | Orchestration | Multi-service management |
+| **Nginx** | Web server | Production-grade static file serving |
+
+---
+
+## 🎯 Key Design Decisions
+
+### 1. **DuckDB over SQLite**
+- **Rationale**: DuckDB reads CSV directly without importing, better for analytical queries
+- **Benefit**: Faster uploads, lower memory usage, better performance on large files
+
+### 2. **Backend SQL Generation**
+- **Rationale**: Security (API key protection), better control, server-side validation
+- **Alternative Rejected**: Client-side with sql.js (security risk, limited scalability)
+
+### 3. **Session-based Architecture**
+- **Rationale**: Multi-user support, isolation, automatic cleanup
+- **Implementation**: UUID sessions, 2-hour TTL, background scheduler
+
+### 4. **Pydantic Models Throughout**
+- **Rationale**: Type safety, validation, OpenAPI auto-generation
+- **Benefit**: Fewer bugs, better documentation, client SDKs possible
+
+### 5. **Separation of Concerns**
+- **Routers**: HTTP request handling
+- **Services**: Business logic
+- **Models**: Data validation
+- **Rationale**: Testability, maintainability, scalability
+
+---
+
+## 📁 Project Structure
+
+```
+.
+├── backend/                    # FastAPI application
+│   ├── app/
+│   │   ├── routers/           # API endpoints (health, upload, query)
+│   │   ├── services/          # Business logic (LLM, DuckDB, session)
+│   │   ├── models.py          # Pydantic models
+│   │   ├── config.py          # Settings (env vars, constants)
+│   │   └── main.py            # FastAPI app + CORS + scheduler
+│   ├── uploads/               # Session CSV files (gitignored)
+│   ├── Dockerfile             # Production image (smaller)
+│   ├── Dockerfile.dev         # Dev image (hot-reload)
+│   └── requirements.txt       # Python dependencies
+│
+├── src/                       # React application
+│   ├── api/                   # API client (fetch wrapper)
+│   ├── components/ui/         # Reusable UI components
+│   ├── config/                # Constants (colors, messages)
+│   ├── types/                 # TypeScript interfaces
+│   ├── App.tsx                # Main component (state + UI)
+│   └── main.tsx               # Entry point + CSS
+│
+├── docker/                    # Docker configs
+│   ├── Dockerfile             # Frontend production (Nginx)
+│   └── Dockerfile.dev         # Frontend dev (Vite server)
+│
+├── docs/                      # Documentation
+│   ├── DOCKER_SETUP.md        # Docker guide
+│   ├── TESTING_GUIDE.md       # Test instructions
+│   ├── IMPLEMENTATION_SUMMARY.md  # Architecture details
+│   └── MIGRATION_GUIDE.md     # Design evolution
+│
+├── examples/                  # Sample data
+│   └── test_data.csv          # Demo CSV
+│
+├── docker-compose.dev.yml     # Dev environment (hot-reload)
+├── docker-compose.prod.yml    # Production environment
+├── docker-compose.yml         # All services
+├── .env.example               # Env template
+└── README.md                  # This file
+```
+
+---
+
+## 📚 Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Docker Setup](docs/DOCKER_SETUP.md) | Detailed Docker configuration guide |
+| [Testing Guide](docs/TESTING_GUIDE.md) | Comprehensive test scenarios + expected results |
+| [Implementation Summary](docs/IMPLEMENTATION_SUMMARY.md) | Technical architecture + implementation phases |
+| [Migration Guide](docs/MIGRATION_GUIDE.md) | Client-side → Backend architecture transition |
+
+---
+
+## 🛠️ Development
+
+### Running Locally
+
+```bash
+# Development mode (hot-reload)
+docker-compose -f docker-compose.dev.yml up
+
+# Production mode
+docker-compose -f docker-compose.prod.yml up --build -d
+
+# Stop services
+docker-compose -f docker-compose.dev.yml down
+```
+
+### Development Workflow
+
+1. **Backend changes**: Auto-reload (Uvicorn watchfiles)
+2. **Frontend changes**: HMR (Vite hot module replacement)
+3. **View logs**: `docker-compose logs -f [service-name]`
+4. **Backend logs**: `docker logs data-insight-backend-dev`
+
+### Testing
+
+```bash
+# API health check
+curl http://localhost:8000/api/health
+
+# Upload test CSV
+curl -X POST http://localhost:8000/api/upload \
+  -F "file=@examples/test_data.csv"
+
+# Full test suite
+cd docs && cat TESTING_GUIDE.md  # Follow guide
+```
+
+### Environment Variables
+
+```env
+# Required
+OPENAI_API_KEY=sk-your-key-here
+
+# Optional (defaults shown)
+SESSION_TTL_HOURS=2
+MAX_FILE_SIZE_MB=100
+CORS_ORIGINS=http://localhost:5173,http://localhost:8080
+VITE_API_URL=http://localhost:8000
+```
+
+---
+
+## 🔒 Security Features
+
+✅ **API Key Protection**: Never exposed to frontend, backend-only  
+✅ **Session Isolation**: UUID-based, each user has separate data space  
+✅ **Auto Cleanup**: Expired sessions deleted automatically (2-hour TTL)  
+✅ **SQL Injection Prevention**: Parameterized queries, SELECT-only enforcement  
+✅ **File Size Limits**: 100MB default, prevents DoS attacks  
+✅ **CORS Configuration**: Whitelist allowed origins  
+✅ **Type Validation**: Pydantic validates all inputs  
+
+---
+
+## 🎓 What I Learned
+
+### Technical Challenges Solved
+
+1. **Numpy Type Serialization**: DuckDB returns numpy types → Added `.item()` conversion
+2. **Docker Build Performance**: Network timeouts → Optimized package installation order
+3. **Hot-Reload in Docker**: Volume mounting complexity → Proper Dockerfile layering
+4. **LLM Prompt Engineering**: Balancing SQL generation vs conversation → Added conversation detection
+
+### Architectural Insights
+
+- **DuckDB is perfect for this use case** - Direct CSV querying beats import-first approaches
+- **Session management is critical** - Multi-user support requires careful isolation
+- **Type safety pays dividends** - TypeScript + Pydantic caught many bugs early
+- **Good documentation accelerates development** - Swagger UI made API testing seamless
+
+---
+
+## 🚦 Production Readiness
+
+✅ **Containerized**: Docker + Docker Compose  
+✅ **Documented**: README + 4 detailed docs  
+✅ **Typed**: TypeScript + Pydantic  
+✅ **Tested**: Manual test suite + API docs  
+✅ **Monitored**: Health check endpoint  
+✅ **Logged**: Structured logging (Uvicorn)  
+✅ **Configurable**: Environment variables  
+✅ **Scalable**: Stateless backend, session-based  
+
+### Deployment Checklist
+
+- [ ] Set production `OPENAI_API_KEY`
+- [ ] Configure `CORS_ORIGINS` for production domain
+- [ ] Set up monitoring (e.g., Datadog, New Relic)
+- [ ] Configure log aggregation (e.g., ELK stack)
+- [ ] Set up backups for session data
+- [ ] Configure SSL/TLS certificates
+- [ ] Set up load balancer if needed
+- [ ] Run security audit (e.g., Snyk, OWASP ZAP)
+
+---
+
+## 🤝 Contributing
+
+This project was created as an interview assignment. Feedback and suggestions are welcome!
+
+---
+
+## 📝 License
+
+This project is for educational and interview purposes.
+
+---
+
+## 👤 Author
+
+**Created for Agoda Interview Process**
+
+Built with ❤️ using modern web technologies and best practices.
+
+---
+
+## 🙏 Acknowledgments
+
+- **OpenAI** for GPT-4 API
+- **FastAPI** community for excellent framework
+- **DuckDB** team for powerful embedded database
+- **React** and **Vite** teams for amazing developer experience
+
+---
+
+**⭐ If you find this project interesting, please star it!**
+
+---
+
+*Last Updated: November 2024*
