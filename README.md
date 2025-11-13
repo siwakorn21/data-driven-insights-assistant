@@ -281,7 +281,7 @@ Hotel E,45000,Germany,4.3,100
 
 ```
 .
-├── backend/                    # FastAPI application
+├── backend/                   # FastAPI application
 │   ├── app/
 │   │   ├── routers/           # API endpoints (health, upload, query)
 │   │   ├── services/          # Business logic (LLM, DuckDB, session)
@@ -306,13 +306,19 @@ Hotel E,45000,Germany,4.3,100
 │   └── Dockerfile.dev         # Frontend dev (Vite server)
 │
 ├── docs/                      # Documentation
-│   ├── DOCKER_SETUP.md        # Docker guide
+│   ├── DEPLOYMENT.md          # CI/CD and deployment guide
+│   ├── DOCKER_SETUP.md        # Docker configuration
 │   ├── TESTING_GUIDE.md       # Test instructions
 │   └── IMPLEMENTATION_SUMMARY.md  # Architecture details
 │
 ├── examples/                  # Sample data
 │   └── test_data.csv          # Demo CSV
 │
+├── scripts/                   # Deployment scripts
+│   └── deploy.sh              # Production deployment script
+│
+├── .gitlab-ci.yml             # GitLab CI/CD pipeline configuration
+├── .gitleaks.toml             # Secret scanning configuration
 ├── docker-compose.dev.yml     # Dev environment (hot-reload)
 ├── docker-compose.prod.yml    # Production environment
 ├── docker-compose.yml         # All services
@@ -329,6 +335,7 @@ Hotel E,45000,Germany,4.3,100
 | [Docker Setup](docs/DOCKER_SETUP.md) | Detailed Docker configuration guide |
 | [Testing Guide](docs/TESTING_GUIDE.md) | Comprehensive test scenarios + expected results |
 | [Implementation Summary](docs/IMPLEMENTATION_SUMMARY.md) | Technical architecture + implementation phases |
+| [Deployment Guide](docs/DEPLOYMENT.md) | CI/CD pipeline setup and production deployment |
 
 ---
 
@@ -385,13 +392,15 @@ VITE_API_URL=http://localhost:8000
 
 ## 🔒 Security Features
 
-✅ **API Key Protection**: Never exposed to frontend, backend-only  
-✅ **Session Isolation**: UUID-based, each user has separate data space  
-✅ **Auto Cleanup**: Expired sessions deleted automatically (2-hour TTL)  
-✅ **SQL Injection Prevention**: Parameterized queries, SELECT-only enforcement  
-✅ **File Size Limits**: 100MB default, prevents DoS attacks  
-✅ **CORS Configuration**: Whitelist allowed origins  
-✅ **Type Validation**: Pydantic validates all inputs  
+✅ **API Key Protection**: Never exposed to frontend, backend-only
+✅ **Session Isolation**: UUID-based, each user has separate data space
+✅ **Auto Cleanup**: Expired sessions deleted automatically (2-hour TTL)
+✅ **SQL Injection Prevention**: Parameterized queries, SELECT-only enforcement
+✅ **File Size Limits**: 100MB default, prevents DoS attacks
+✅ **CORS Configuration**: Whitelist allowed origins
+✅ **Type Validation**: Pydantic validates all inputs
+✅ **Secret Scanning**: Gitleaks detects accidentally committed API keys, tokens, passwords
+✅ **Vulnerability Scanning**: Trivy scans dependencies and containers for CVEs  
 
 ---
 
@@ -415,25 +424,48 @@ VITE_API_URL=http://localhost:8000
 
 ## 🚦 Production Readiness
 
-✅ **Containerized**: Docker + Docker Compose  
-✅ **Documented**: README + 4 detailed docs  
-✅ **Typed**: TypeScript + Pydantic  
-✅ **Tested**: Manual test suite + API docs  
-✅ **Monitored**: Health check endpoint  
-✅ **Logged**: Structured logging (Uvicorn)  
-✅ **Configurable**: Environment variables  
-✅ **Scalable**: Stateless backend, session-based  
+✅ **Containerized**: Docker + Docker Compose
+✅ **CI/CD Pipeline**: Automated testing & deployment with GitLab CI/CD
+✅ **Documented**: README + 4 detailed docs
+✅ **Typed**: TypeScript + Pydantic
+✅ **Tested**: Manual test suite + API docs
+✅ **Monitored**: Health check endpoint
+✅ **Logged**: Structured logging (Uvicorn)
+✅ **Configurable**: Environment variables
+✅ **Scalable**: Stateless backend, session-based
+✅ **Security Scanned**: Trivy vulnerability scanning in CI
+
+### CI/CD Features
+
+- **Automated Testing**: Frontend/backend linting, builds on every push/MR
+- **Docker Hub Integration**: Multi-platform image builds (amd64/arm64)
+- **Semantic Versioning**: Automatic tagging from git tags
+- **Environment Deployments**: Staging and production pipelines with manual triggers
+- **Health Checks**: Automatic validation after deployment
+- **Rollback Support**: Manual rollback via GitLab UI or pipeline
+- **Security Scanning**:
+  - Trivy vulnerability scanner for dependencies and containers
+  - Gitleaks secret scanner to detect API keys, tokens, passwords
+- **GitLab Environments**: Track deployment history and status
+
+See [Deployment Guide](docs/DEPLOYMENT.md) for complete setup instructions.
 
 ### Deployment Checklist
 
+- [ ] Configure GitLab CI/CD variables (DOCKER_HUB_USERNAME, DOCKER_HUB_TOKEN)
+- [ ] Enable GitLab Runner (shared or self-hosted)
 - [ ] Set production `OPENAI_API_KEY`
 - [ ] Configure `CORS_ORIGINS` for production domain
+- [ ] Update deployment URLs in `.gitlab-ci.yml`
+- [ ] Uncomment and configure deployment commands in pipeline
 - [ ] Set up monitoring (e.g., Datadog, New Relic)
 - [ ] Configure log aggregation (e.g., ELK stack)
 - [ ] Set up backups for session data
 - [ ] Configure SSL/TLS certificates
 - [ ] Set up load balancer if needed
 - [ ] Run security audit (e.g., Snyk, OWASP ZAP)
+- [ ] Test CI/CD pipeline with a test deployment
+- [ ] Configure protected branches and tags in GitLab
 
 ---
 

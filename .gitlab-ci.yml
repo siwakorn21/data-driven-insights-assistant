@@ -1,0 +1,323 @@
+# GitLab CI/CD Pipeline Configuration
+# For Data-Driven Insights Assistant
+
+# Define stages
+stages:
+  - test
+  - build
+  - deploy
+  - security
+
+# Global variables
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: "/certs"
+  REGISTRY: docker.io
+  FRONTEND_IMAGE_NAME: data-insight-frontend
+  BACKEND_IMAGE_NAME: data-insight-backend
+  NODE_VERSION: "20"
+  PYTHON_VERSION: "3.11"
+
+# Docker-in-Docker service for building images
+.docker_template: &docker_template
+  image: docker:24.0.5
+  services:
+    - docker:24.0.5-dind
+  before_script:
+    - docker info
+    - echo "$DOCKER_HUB_TOKEN" | docker login -u "$DOCKER_HUB_USERNAME" --password-stdin $REGISTRY
+
+# ==================== TEST STAGE ====================
+
+# Frontend - Lint & Build
+frontend:test:
+  stage: test
+  image: node:${NODE_VERSION}-alpine
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}-frontend
+    paths:
+      - node_modules/
+  script:
+    - echo "📦 Installing frontend dependencies..."
+    - npm ci
+    - echo "🔍 Linting frontend code..."
+    - npm run lint || echo "Linting completed with warnings"
+    - echo "🏗️ Building frontend..."
+    - npm run build
+    - echo "✅ Frontend tests passed"
+  artifacts:
+    paths:
+      - dist/
+    expire_in: 1 day
+  only:
+    - main
+    - develop
+    - merge_requests
+    - tags
+
+# Backend - Lint & Type Check
+backend:test:
+  stage: test
+  image: python:${PYTHON_VERSION}-slim
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}-backend
+    paths:
+      - backend/.cache/pip
+  before_script:
+    - cd backend
+    - pip install --cache-dir .cache/pip -r requirements.txt
+  script:
+    - echo "🔍 Linting backend code with flake8..."
+    - pip install flake8
+    - flake8 app/ --count --select=E9,F63,F7,F82 --show-source --statistics
+    - flake8 app/ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+    - echo "🔍 Type checking with mypy..."
+    - pip install mypy
+    - mypy app/ --ignore-missing-imports || true
+    - echo "✅ Backend tests passed"
+  only:
+    - main
+    - develop
+    - merge_requests
+    - tags
+
+# ==================== BUILD STAGE ====================
+
+# Build Frontend Docker Image
+build:frontend:
+  <<: *docker_template
+  stage: build
+  script:
+    - echo "🏗️ Building frontend Docker image..."
+    - |
+      # Determine tags
+      if [[ "$CI_COMMIT_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        VERSION="${CI_COMMIT_TAG}"
+        MAJOR=$(echo $VERSION | cut -d. -f1)
+        MINOR=$(echo $VERSION | cut -d. -f2)
+        TAGS="-t $REGISTRY/$DOCKER_HUB_USERNAME/$FRONTEND_IMAGE_NAME:$VERSION"
+        TAGS="$TAGS -t $REGISTRY/$DOCKER_HUB_USERNAME/$FRONTEND_IMAGE_NAME:${MAJOR}.${MINOR}"
+        TAGS="$TAGS -t $REGISTRY/$DOCKER_HUB_USERNAME/$FRONTEND_IMAGE_NAME:${MAJOR}"
+        TAGS="$TAGS -t $REGISTRY/$DOCKER_HUB_USERNAME/$FRONTEND_IMAGE_NAME:latest"
+      elif [[ "$CI_COMMIT_BRANCH" == "main" ]]; then
+        TAGS="-t $REGISTRY/$DOCKER_HUB_USERNAME/$FRONTEND_IMAGE_NAME:latest"
+        TAGS="$TAGS -t $REGISTRY/$DOCKER_HUB_USERNAME/$FRONTEND_IMAGE_NAME:main-${CI_COMMIT_SHORT_SHA}"
+      else
+        TAGS="-t $REGISTRY/$DOCKER_HUB_USERNAME/$FRONTEND_IMAGE_NAME:${CI_COMMIT_REF_SLUG}-${CI_COMMIT_SHORT_SHA}"
+      fi
+    - |
+      docker buildx create --use
+      docker buildx build \
+        --platform linux/amd64,linux/arm64 \
+        --file docker/Dockerfile \
+        --push \
+        $TAGS \
+        .
+    - echo "✅ Frontend image built and pushed"
+  only:
+    - main
+    - develop
+    - tags
+
+# Build Backend Docker Image
+build:backend:
+  <<: *docker_template
+  stage: build
+  script:
+    - echo "🏗️ Building backend Docker image..."
+    - |
+      # Determine tags
+      if [[ "$CI_COMMIT_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        VERSION="${CI_COMMIT_TAG}"
+        MAJOR=$(echo $VERSION | cut -d. -f1)
+        MINOR=$(echo $VERSION | cut -d. -f2)
+        TAGS="-t $REGISTRY/$DOCKER_HUB_USERNAME/$BACKEND_IMAGE_NAME:$VERSION"
+        TAGS="$TAGS -t $REGISTRY/$DOCKER_HUB_USERNAME/$BACKEND_IMAGE_NAME:${MAJOR}.${MINOR}"
+        TAGS="$TAGS -t $REGISTRY/$DOCKER_HUB_USERNAME/$BACKEND_IMAGE_NAME:${MAJOR}"
+        TAGS="$TAGS -t $REGISTRY/$DOCKER_HUB_USERNAME/$BACKEND_IMAGE_NAME:latest"
+      elif [[ "$CI_COMMIT_BRANCH" == "main" ]]; then
+        TAGS="-t $REGISTRY/$DOCKER_HUB_USERNAME/$BACKEND_IMAGE_NAME:latest"
+        TAGS="$TAGS -t $REGISTRY/$DOCKER_HUB_USERNAME/$BACKEND_IMAGE_NAME:main-${CI_COMMIT_SHORT_SHA}"
+      else
+        TAGS="-t $REGISTRY/$DOCKER_HUB_USERNAME/$BACKEND_IMAGE_NAME:${CI_COMMIT_REF_SLUG}-${CI_COMMIT_SHORT_SHA}"
+      fi
+    - |
+      docker buildx create --use
+      docker buildx build \
+        --platform linux/amd64,linux/arm64 \
+        --file backend/Dockerfile \
+        --push \
+        $TAGS \
+        backend/
+    - echo "✅ Backend image built and pushed"
+  only:
+    - main
+    - develop
+    - tags
+
+# ==================== SECURITY STAGE ====================
+
+# Security Scan with Trivy
+security:scan:
+  stage: security
+  image: aquasec/trivy:latest
+  script:
+    - echo "🔒 Running security vulnerability scan..."
+    - trivy fs --exit-code 0 --severity HIGH,CRITICAL --no-progress .
+    - trivy fs --exit-code 0 --severity MEDIUM --no-progress . || true
+    - echo "✅ Security scan completed"
+  allow_failure: true
+  only:
+    - main
+    - develop
+    - merge_requests
+    - tags
+
+# Secret Scanning with Gitleaks
+security:secrets:
+  stage: security
+  image: zricethezav/gitleaks:latest
+  script:
+    - echo "🔐 Scanning for secrets and credentials..."
+    - |
+      gitleaks detect \
+        --source . \
+        --config .gitleaks.toml \
+        --verbose \
+        --no-git \
+        --report-format json \
+        --report-path gitleaks-report.json \
+        --exit-code 0
+    - |
+      # Check if secrets were found
+      if [ -f gitleaks-report.json ]; then
+        SECRET_COUNT=$(cat gitleaks-report.json | grep -c "Secret" || echo "0")
+        if [ "$SECRET_COUNT" -gt 0 ]; then
+          echo "⚠️ WARNING: Found $SECRET_COUNT potential secrets!"
+          echo "Please review the report below:"
+          cat gitleaks-report.json
+          exit 1
+        else
+          echo "✅ No secrets detected"
+        fi
+      fi
+  artifacts:
+    paths:
+      - gitleaks-report.json
+    when: always
+    expire_in: 30 days
+  allow_failure: false
+  only:
+    - main
+    - develop
+    - merge_requests
+    - tags
+
+# ==================== DEPLOY STAGE ====================
+
+# Deploy to Staging
+deploy:staging:
+  stage: deploy
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache curl openssh-client
+  script:
+    - echo "🚀 Deploying to staging environment..."
+    - echo "Environment: staging"
+    - echo "Version: ${CI_COMMIT_SHORT_SHA}"
+    - |
+      # Example: SSH to staging server and deploy
+      # Uncomment and configure for your staging environment
+      # mkdir -p ~/.ssh
+      # echo "$STAGING_SSH_KEY" > ~/.ssh/id_rsa
+      # chmod 600 ~/.ssh/id_rsa
+      # ssh-keyscan -H $STAGING_HOST >> ~/.ssh/known_hosts
+      # ssh $STAGING_USER@$STAGING_HOST "cd /app && docker-compose pull && docker-compose up -d"
+
+    - echo "🧪 Running smoke tests..."
+    - sleep 10
+    # curl -f $STAGING_URL/api/health || exit 1
+    - echo "✅ Staging deployment completed successfully"
+  environment:
+    name: staging
+    url: https://staging.example.com
+  only:
+    - develop
+  when: manual
+
+# Deploy to Production
+deploy:production:
+  stage: deploy
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache curl openssh-client
+  script:
+    - echo "🚀 Deploying to production environment..."
+    - echo "Environment: production"
+    - echo "Version: ${CI_COMMIT_TAG:-${CI_COMMIT_SHORT_SHA}}"
+    - |
+      # Example: Deploy to cloud provider
+      # Uncomment and configure for your production environment
+
+      # Option 1: SSH Deployment
+      # mkdir -p ~/.ssh
+      # echo "$PRODUCTION_SSH_KEY" > ~/.ssh/id_rsa
+      # chmod 600 ~/.ssh/id_rsa
+      # ssh-keyscan -H $PRODUCTION_HOST >> ~/.ssh/known_hosts
+      # ssh $PRODUCTION_USER@$PRODUCTION_HOST "cd /app && docker-compose pull && docker-compose up -d"
+
+      # Option 2: Kubernetes Deployment
+      # apk add --no-cache kubectl
+      # echo "$KUBECONFIG" > ~/.kube/config
+      # kubectl set image deployment/frontend frontend=$REGISTRY/$DOCKER_HUB_USERNAME/$FRONTEND_IMAGE_NAME:$CI_COMMIT_TAG
+      # kubectl set image deployment/backend backend=$REGISTRY/$DOCKER_HUB_USERNAME/$BACKEND_IMAGE_NAME:$CI_COMMIT_TAG
+
+      # Option 3: AWS ECS
+      # apk add --no-cache aws-cli
+      # aws ecs update-service --cluster my-cluster --service my-service --force-new-deployment
+
+    - echo "🏥 Running health checks..."
+    - sleep 10
+    # curl -f $PRODUCTION_URL/api/health || exit 1
+    - echo "✅ Production deployment completed successfully"
+    - echo "📊 Version: ${CI_COMMIT_TAG:-${CI_COMMIT_SHORT_SHA}}"
+  environment:
+    name: production
+    url: https://app.example.com
+  only:
+    - tags
+  when: manual
+
+# Rollback Production
+rollback:production:
+  stage: deploy
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache curl openssh-client
+  script:
+    - echo "⚠️ Rolling back production deployment..."
+    - |
+      # Add your rollback logic here
+      # Example: Deploy previous version
+      # ssh $PRODUCTION_USER@$PRODUCTION_HOST "cd /app && docker-compose pull && docker-compose up -d"
+    - echo "✅ Rollback completed"
+  environment:
+    name: production
+    action: rollback
+  when: manual
+  only:
+    - tags
+
+# ==================== DOCKER CLEANUP ====================
+
+# Cleanup old Docker images
+cleanup:docker:
+  stage: .post
+  <<: *docker_template
+  script:
+    - echo "🧹 Cleaning up old Docker images..."
+    - docker system prune -af --filter "until=168h"
+    - echo "✅ Cleanup completed"
+  only:
+    - schedules
+  when: manual

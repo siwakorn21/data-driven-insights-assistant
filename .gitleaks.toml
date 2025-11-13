@@ -1,0 +1,84 @@
+# Gitleaks Configuration
+# https://github.com/gitleaks/gitleaks
+
+title = "Gitleaks Configuration for Data-Driven Insights Assistant"
+
+# Extend default rules
+[extend]
+useDefault = true
+
+# Custom rules for this project
+[[rules]]
+id = "openai-api-key"
+description = "OpenAI API Key"
+regex = '''sk-[a-zA-Z0-9]{48}'''
+tags = ["api-key", "openai"]
+
+[[rules]]
+id = "docker-hub-token"
+description = "Docker Hub Access Token"
+regex = '''dckr_pat_[a-zA-Z0-9_-]{36}'''
+tags = ["token", "docker"]
+
+[[rules]]
+id = "aws-access-key"
+description = "AWS Access Key ID"
+regex = '''AKIA[0-9A-Z]{16}'''
+tags = ["aws", "api-key"]
+
+[[rules]]
+id = "generic-api-key"
+description = "Generic API Key"
+regex = '''(?i)(api[_-]?key|apikey|api[_-]?secret|apisecret)[\"']?\s*[:=]\s*[\"']?[a-zA-Z0-9]{20,}'''
+tags = ["api-key"]
+
+[[rules]]
+id = "private-key"
+description = "Private Key"
+regex = '''-----BEGIN (RSA|DSA|EC|OPENSSH) PRIVATE KEY-----'''
+tags = ["key", "private-key"]
+
+[[rules]]
+id = "gitlab-token"
+description = "GitLab Personal Access Token"
+regex = '''glpat-[a-zA-Z0-9_-]{20}'''
+tags = ["token", "gitlab"]
+
+[[rules]]
+id = "github-token"
+description = "GitHub Personal Access Token"
+regex = '''ghp_[a-zA-Z0-9]{36}'''
+tags = ["token", "github"]
+
+[[rules]]
+id = "jwt-token"
+description = "JSON Web Token"
+regex = '''eyJ[a-zA-Z0-9_-]*\.eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]*'''
+tags = ["token", "jwt"]
+
+# Allowlist - Files to ignore
+[allowlist]
+description = "Global allowlist"
+paths = [
+    '''\.env\.example$''',
+    '''\.env\.template$''',
+    '''\.gitleaks\.toml$''',
+    '''docs/.*\.md$''',
+    '''README\.md$''',
+    '''TESTING_GUIDE\.md$''',
+]
+
+# Ignore test data
+[[allowlist.regexes]]
+regex = '''test_data\.csv$'''
+description = "Test CSV file"
+
+# Ignore example configurations
+[[allowlist.regexes]]
+regex = '''(?i)example|sample|dummy|placeholder|your-key-here'''
+description = "Example/placeholder values"
+
+# Ignore comments
+[[allowlist.regexes]]
+regex = '''^\s*#.*$'''
+description = "Comments"
