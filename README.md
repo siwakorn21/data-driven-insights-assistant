@@ -18,6 +18,7 @@
 - [Architecture](#%EF%B8%8F-architecture)
 - [Quick Start](#-quick-start)
 - [Usage Examples](#-usage-examples)
+- [API Documentation](#-api-documentation)
 - [Technical Stack](#-technology-stack)
 - [Key Design Decisions](#-key-design-decisions)
 - [Project Structure](#-project-structure)
@@ -31,7 +32,8 @@
 ### Live Application
 - **Frontend**: http://localhost:5173
 - **Backend API**: http://localhost:8000
-- **API Docs**: http://localhost:8000/docs (Interactive Swagger UI)
+- **Swagger UI**: http://localhost:8000/docs (Interactive API documentation)
+- **ReDoc**: http://localhost:8000/redoc (Alternative API documentation)
 
 ### Demo Workflow
 
@@ -62,6 +64,7 @@ Data-Driven Insights Assistant is a production-ready full-stack application that
 - **🎯 Intelligent Clarifications**: Asks follow-up questions for ambiguous queries
 - **📥 Export Results**: Download query results as CSV
 - **🔒 Secure Sessions**: UUID-based isolation with automatic cleanup (2-hour TTL)
+- **📚 Interactive API Docs**: Swagger UI and ReDoc for testing and exploring APIs
 - **⚡ Real-time Updates**: Hot-reload in development mode
 - **🎨 Modern UI**: Responsive design with Tailwind CSS and Framer Motion
 
@@ -399,6 +402,65 @@ Hotel E,45000,Germany,4.3,100
 
 ---
 
+## 📚 API Documentation
+
+The backend provides **interactive API documentation** powered by OpenAPI (Swagger):
+
+### Swagger UI (http://localhost:8000/docs)
+
+Full-featured interactive documentation where you can:
+- **Explore all endpoints** - View request/response schemas for all 6 API endpoints
+- **Try it out** - Execute API calls directly from the browser
+- **See examples** - View sample requests and responses
+- **Test authentication** - No authentication required for this demo
+- **Download OpenAPI spec** - Export as JSON/YAML for client generation
+
+### ReDoc (http://localhost:8000/redoc)
+
+Alternative documentation interface with:
+- **Clean, responsive design** - Better for reading and sharing
+- **Search functionality** - Quickly find endpoints
+- **Code samples** - Multiple language examples
+- **Nested schemas** - Clear data model visualization
+
+### Features
+
+✅ **Auto-generated** - FastAPI automatically creates docs from code
+✅ **Always up-to-date** - Documentation syncs with code changes
+✅ **Request validation** - Shows required fields, types, constraints
+✅ **Response examples** - See exactly what each endpoint returns
+✅ **Error codes** - Documented HTTP status codes and error messages
+✅ **Type information** - Full Pydantic model schemas displayed
+
+### Example Use Cases
+
+**For Developers:**
+- Test endpoints without writing code
+- Understand request/response formats
+- Debug API integration issues
+- Generate client SDKs using OpenAPI spec
+
+**For Interviewers:**
+- Explore API capabilities interactively
+- Verify endpoint functionality
+- See request/response examples
+- Test error handling
+
+### API Endpoints Overview
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/health` | GET | Health check with DuckDB version |
+| `/api/upload` | POST | Upload CSV and create session |
+| `/api/sessions/{id}/schema` | GET | Get table schema with samples |
+| `/api/query` | POST | Natural language to SQL query |
+| `/api/execute-sql` | POST | Execute raw SQL query |
+| `/api/sessions/{id}` | DELETE | Delete session and cleanup |
+
+See [backend/README.md](backend/README.md) for detailed request/response examples.
+
+---
+
 ## 🔧 Technology Stack
 
 ### Backend
@@ -573,71 +635,6 @@ MAX_FILE_SIZE_MB=100
 CORS_ORIGINS=http://localhost:5173,http://localhost:8080
 VITE_API_URL=http://localhost:8000
 ```
-
----
-
-## 🎓 What I Learned
-
-### Technical Challenges Solved
-
-1. **Numpy Type Serialization**: DuckDB returns numpy types → Added `.item()` conversion
-2. **Docker Build Performance**: Network timeouts → Optimized package installation order
-3. **Hot-Reload in Docker**: Volume mounting complexity → Proper Dockerfile layering
-4. **LLM Prompt Engineering**: Balancing SQL generation vs conversation → Added conversation detection
-
-### Architectural Insights
-
-- **DuckDB is perfect for this use case** - Direct CSV querying beats import-first approaches
-- **Session management is critical** - Multi-user support requires careful isolation
-- **Type safety pays dividends** - TypeScript + Pydantic caught many bugs early
-- **Good documentation accelerates development** - Swagger UI made API testing seamless
-
----
-
-## 🚦 Production Readiness
-
-✅ **Containerized**: Docker + Docker Compose
-✅ **CI/CD Pipeline**: Automated testing & deployment with GitLab CI/CD
-✅ **Documented**: README + 4 detailed docs
-✅ **Typed**: TypeScript + Pydantic
-✅ **Tested**: Manual test suite + API docs
-✅ **Monitored**: Health check endpoint
-✅ **Logged**: Structured logging (Uvicorn)
-✅ **Configurable**: Environment variables
-✅ **Scalable**: Stateless backend, session-based
-✅ **Security Scanned**: Trivy vulnerability scanning in CI
-
-### CI/CD Features
-
-- **Automated Testing**: Frontend/backend linting, builds on every push/MR
-- **Docker Hub Integration**: Multi-platform image builds (amd64/arm64)
-- **Semantic Versioning**: Automatic tagging from git tags
-- **Environment Deployments**: Staging and production pipelines with manual triggers
-- **Health Checks**: Automatic validation after deployment
-- **Rollback Support**: Manual rollback via GitLab UI or pipeline
-- **Security Scanning**:
-  - Trivy vulnerability scanner for dependencies and containers
-  - Gitleaks secret scanner to detect API keys, tokens, passwords
-- **GitLab Environments**: Track deployment history and status
-
-See [Deployment Guide](docs/DEPLOYMENT.md) for complete setup instructions.
-
-### Deployment Checklist
-
-- [ ] Configure GitLab CI/CD variables (DOCKER_HUB_USERNAME, DOCKER_HUB_TOKEN)
-- [ ] Enable GitLab Runner (shared or self-hosted)
-- [ ] Set production `OPENAI_API_KEY`
-- [ ] Configure `CORS_ORIGINS` for production domain
-- [ ] Update deployment URLs in `.gitlab-ci.yml`
-- [ ] Uncomment and configure deployment commands in pipeline
-- [ ] Set up monitoring (e.g., Datadog, New Relic)
-- [ ] Configure log aggregation (e.g., ELK stack)
-- [ ] Set up backups for session data
-- [ ] Configure SSL/TLS certificates
-- [ ] Set up load balancer if needed
-- [ ] Run security audit (e.g., Snyk, OWASP ZAP)
-- [ ] Test CI/CD pipeline with a test deployment
-- [ ] Configure protected branches and tags in GitLab
 
 ---
 
