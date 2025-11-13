@@ -308,8 +308,7 @@ Hotel E,45000,Germany,4.3,100
 ├── docs/                      # Documentation
 │   ├── DOCKER_SETUP.md        # Docker guide
 │   ├── TESTING_GUIDE.md       # Test instructions
-│   ├── IMPLEMENTATION_SUMMARY.md  # Architecture details
-│   └── MIGRATION_GUIDE.md     # Design evolution
+│   └── IMPLEMENTATION_SUMMARY.md  # Architecture details
 │
 ├── examples/                  # Sample data
 │   └── test_data.csv          # Demo CSV
@@ -330,7 +329,6 @@ Hotel E,45000,Germany,4.3,100
 | [Docker Setup](docs/DOCKER_SETUP.md) | Detailed Docker configuration guide |
 | [Testing Guide](docs/TESTING_GUIDE.md) | Comprehensive test scenarios + expected results |
 | [Implementation Summary](docs/IMPLEMENTATION_SUMMARY.md) | Technical architecture + implementation phases |
-| [Migration Guide](docs/MIGRATION_GUIDE.md) | Client-side → Backend architecture transition |
 
 ---
 
