@@ -37,6 +37,22 @@ const isNumeric = (v: any): boolean => typeof v === "number" && !Number.isNaN(v)
 
 const head = <T,>(arr: T[], n = 5): T[] => arr.slice(0, n);
 
+// Format numbers with commas and decimals
+const formatNumber = (value: any): string => {
+  if (value === null || value === undefined) return "N/A";
+  const num = Number(value);
+  if (isNaN(num)) return String(value);
+  return num.toLocaleString(undefined, { maximumFractionDigits: 2 });
+};
+
+// Format dates for chart display
+const formatDate = (value: any): string => {
+  if (!value) return "";
+  const date = new Date(value);
+  if (isNaN(date.getTime())) return String(value);
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+};
+
 export default function App() {
   // Session state
   const [sessionId, setSessionId] = useState<string>("");
@@ -120,22 +136,108 @@ export default function App() {
     }
   };
 
+  // -------- Pivot Data for Multi-Series Charts --------
+
+  function pivotData(data: RowData[], xCol: string, groupCol: string, yCol: string): RowData[] {
+    const pivoted: Record<string, any> = {};
+
+    data.forEach(row => {
+      const xVal = row[xCol];
+      const groupVal = row[groupCol];
+      let yVal = row[yCol];
+
+      // Convert string numbers to actual numbers
+      if (typeof yVal === 'string' && !isNaN(Number(yVal))) {
+        yVal = Number(yVal);
+      }
+
+      if (!pivoted[xVal]) {
+        pivoted[xVal] = { [xCol]: xVal };
+      }
+      pivoted[xVal][groupVal] = yVal;
+    });
+
+    return Object.values(pivoted);
+  }
+
   // -------- Auto Chart --------
   function autoChart(columns: string[], data: RowData[]): ChartHint {
-    if (!columns.length || !data.length) return null;
+    console.log("autoChart called:", { columns, dataLength: data.length, firstRow: data[0] });
 
+    if (!columns.length || !data.length) {
+      console.log("No columns or data");
+      return null;
+    }
+
+    // Validate we have enough data
+    if (data.length < 1) {
+      console.log("Not enough data");
+      return null;
+    }
+
+    // Case 1: Exactly 2 columns (simple x-y)
     if (columns.length === 2) {
       const [x, y] = columns;
       const numericY = data.every((r) => isNumeric(r[y]) || r[y] == null);
       const dateX = looksDateish(x, data[0]?.[x]);
+      console.log("Case 1 (2 columns):", { x, y, numericY, dateX });
       if (numericY) return { type: dateX ? "line" as const : "bar" as const, x, y };
+    }
+
+    // Case 2: Multiple columns - already pivoted or other multi-column data
+    // Find x (first string/date column) and y columns (remaining numeric columns)
+    const xCol = columns.find((c) => {
+      const firstVal = data[0]?.[c];
+      const isString = typeof firstVal === "string";
+      const isDate = looksDateish(c, firstVal);
+      console.log(`Checking column ${c}:`, { firstVal, isString, isDate });
+      return isString || isDate;
+    });
+
+    console.log("Found xCol:", xCol);
+
+    if (xCol) {
+      const numericCols = columns.filter((c) => {
+        if (c === xCol) return false;
+        // Check if at least 50% of values are numeric (allow some nulls/missing data)
+        const numericCount = data.filter((r) => isNumeric(r[c])).length;
+        const ratio = numericCount / data.length;
+        console.log(`Column ${c} numeric ratio:`, ratio);
+        return ratio >= 0.5; // Lowered from 0.7 to 0.5
+      });
+
+      console.log("Numeric columns:", numericCols);
+
+      if (numericCols.length > 0) {
+        const isDateX = looksDateish(xCol, data[0]?.[xCol]);
+        const hint = {
+          type: isDateX ? "line" as const : "bar" as const,
+          x: xCol,
+          y: numericCols[0] // Just use first for the hint
+        };
+        console.log("Returning hint (Case 2):", hint);
+        return hint;
+      }
     }
 
     // Fallback: pick first string as x and first numeric as y
     const x = columns.find((c) => typeof data[0]?.[c] === "string");
-    const y = columns.find((c) => data.every((r) => isNumeric(r[c]) || r[c] == null));
+    const y = columns.find((c) => {
+      const numericCount = data.filter((r) => isNumeric(r[c])).length;
+      return numericCount / data.length >= 0.5; // Lowered from 0.7 to 0.5
+    });
+
+    console.log("Fallback:", { x, y });
+
     if (x && y) return { type: "bar" as const, x, y };
 
+    // Super fallback: just use first column as x and second as y if we have at least 2 columns
+    if (columns.length >= 2) {
+      console.log("Using super fallback - first 2 columns");
+      return { type: "bar" as const, x: columns[0], y: columns[1] };
+    }
+
+    console.log("No valid chart configuration found");
     return null;
   }
 
@@ -219,8 +321,59 @@ export default function App() {
         }
 
         setLastSQL(sql);
-        setResult({ columns, rows });
-        setChartHint(autoChart(columns, rows));
+
+        // Check if we need to pivot for multi-series charting
+        // Only pivot if: 3 columns, 1 numeric (value), 2 categorical (x-axis + series)
+        const shouldPivot = columns.length === 3 && rows.length > 0;
+
+        if (shouldPivot) {
+          const numericCols = columns.filter((c) => {
+            const numericCount = rows.filter((r: any) => isNumeric(r[c])).length;
+            return numericCount / rows.length >= 0.5; // At least 50% numeric
+          });
+          const stringCols = columns.filter((c) => !numericCols.includes(c));
+
+          if (numericCols.length === 1 && stringCols.length === 2) {
+            const yCol = numericCols[0];
+            const [col1, col2] = stringCols;
+            const col1LooksDate = looksDateish(col1, rows[0]?.[col1]);
+            const col2LooksDate = looksDateish(col2, rows[0]?.[col2]);
+
+            // Prefer date column as x-axis, otherwise use first column
+            const xCol = (col1LooksDate && !col2LooksDate) ? col1 : (col2LooksDate && !col1LooksDate) ? col2 : col1;
+            const groupCol = xCol === col1 ? col2 : col1;
+
+            try {
+              const pivotedData = pivotData(rows as RowData[], xCol, groupCol, yCol);
+              console.log("Pivot result:", { xCol, groupCol, yCol, pivotedData });
+
+              if (pivotedData.length > 0 && Object.keys(pivotedData[0]).length > 1) {
+                const pivotedColumns = Object.keys(pivotedData[0]);
+                console.log("Using pivoted data:", { columns: pivotedColumns, rowCount: pivotedData.length });
+                setResult({ columns: pivotedColumns, rows: pivotedData });
+                const hint = autoChart(pivotedColumns, pivotedData);
+                console.log("Chart hint:", hint);
+                setChartHint(hint);
+              } else {
+                // Pivot failed, use original data
+                console.log("Pivot failed, using original data");
+                setResult({ columns, rows });
+                setChartHint(autoChart(columns, rows));
+              }
+            } catch (e) {
+              console.error("Pivot error:", e);
+              setResult({ columns, rows });
+              setChartHint(autoChart(columns, rows));
+            }
+          } else {
+            setResult({ columns, rows });
+            setChartHint(autoChart(columns, rows));
+          }
+        } else {
+          setResult({ columns, rows });
+          setChartHint(autoChart(columns, rows));
+        }
+
         setMessages((m) => [
           ...m,
           {
@@ -515,15 +668,32 @@ export default function App() {
                     </div>
                   ) : chartHint.type === 'line' ? (
                     <ResponsiveContainer width="100%" height={360}>
-                      <LineChart data={result.rows as any}>
+                      <LineChart data={result.rows as any} margin={{ top: 40, right: 30, left: 20, bottom: 5 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                        <XAxis dataKey={chartHint.x} stroke="#64748b" />
-                        <YAxis stroke="#64748b" />
+                        <XAxis
+                          dataKey={chartHint.x}
+                          stroke="#64748b"
+                          tickFormatter={looksDateish(chartHint.x, result.rows[0]?.[chartHint.x]) ? formatDate : undefined}
+                          angle={-45}
+                          textAnchor="end"
+                          height={80}
+                        />
+                        <YAxis
+                          stroke="#64748b"
+                          tickFormatter={formatNumber}
+                        />
                         <Tooltip
                           contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '6px' }}
-                          labelStyle={{ color: '#1e293b' }}
+                          labelStyle={{ color: '#1e293b', fontWeight: 'bold', marginBottom: '8px' }}
+                          formatter={(value: any, name: string) => [formatNumber(value), name]}
+                          labelFormatter={looksDateish(chartHint.x, result.rows[0]?.[chartHint.x]) ? formatDate : undefined}
                         />
-                        <Legend />
+                        <Legend
+                          verticalAlign="top"
+                          align="right"
+                          wrapperStyle={{ paddingTop: '10px', paddingRight: '10px' }}
+                          iconType="line"
+                        />
                         {result.columns.filter(c => c !== chartHint.x).map((col, idx) => (
                           <Line
                             key={col}
@@ -531,22 +701,38 @@ export default function App() {
                             dataKey={col}
                             stroke={CHART_COLORS[idx % CHART_COLORS.length]}
                             strokeWidth={2}
-                            dot={false}
+                            dot={{ fill: CHART_COLORS[idx % CHART_COLORS.length], r: 4 }}
+                            activeDot={{ r: 6 }}
+                            connectNulls
                           />
                         ))}
                       </LineChart>
                     </ResponsiveContainer>
                   ) : (
                     <ResponsiveContainer width="100%" height={360}>
-                      <BarChart data={result.rows as any}>
+                      <BarChart data={result.rows as any} margin={{ top: 40, right: 30, left: 20, bottom: 5 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                        <XAxis dataKey={chartHint.x} stroke="#64748b" />
-                        <YAxis stroke="#64748b" />
+                        <XAxis
+                          dataKey={chartHint.x}
+                          stroke="#64748b"
+                          angle={-45}
+                          textAnchor="end"
+                          height={80}
+                        />
+                        <YAxis
+                          stroke="#64748b"
+                          tickFormatter={formatNumber}
+                        />
                         <Tooltip
                           contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '6px' }}
-                          labelStyle={{ color: '#1e293b' }}
+                          labelStyle={{ color: '#1e293b', fontWeight: 'bold', marginBottom: '8px' }}
+                          formatter={(value: any, name: string) => [formatNumber(value), name]}
                         />
-                        <Legend />
+                        <Legend
+                          verticalAlign="top"
+                          align="right"
+                          wrapperStyle={{ paddingTop: '10px', paddingRight: '10px' }}
+                        />
                         {result.columns.filter(c => c !== chartHint.x).map((col, idx) => {
                           const yColumns = result.columns.filter(c => c !== chartHint.x);
                           const isSingleColumn = yColumns.length === 1;
