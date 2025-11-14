@@ -510,20 +510,6 @@ Full-featured interactive documentation where you can:
 - **Test authentication** - No authentication required for this demo
 - **Download OpenAPI spec** - Export as JSON/YAML for client generation
 
-### Example Use Cases
-
-**For Developers:**
-- Test endpoints without writing code
-- Understand request/response formats
-- Debug API integration issues
-- Generate client SDKs using OpenAPI spec
-
-**For Interviewers:**
-- Explore API capabilities interactively
-- Verify endpoint functionality
-- See request/response examples
-- Test error handling
-
 ### API Endpoints Overview
 
 | Endpoint | Method | Description |
@@ -755,7 +741,3 @@ Built with ❤️ using modern web technologies and best practices.
 ---
 
 **⭐ If you find this project interesting, please star it!**
-
----
-
-*Last Updated: November 2024*

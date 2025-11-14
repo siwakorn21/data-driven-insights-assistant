@@ -528,7 +528,3 @@ cache:
 - Check pipeline logs: **CI/CD → Pipelines → [Pipeline] → [Job]**
 - View runner logs: `sudo gitlab-runner logs`
 - GitLab Community Forum: https://forum.gitlab.com/
-
----
-
-*Last Updated: November 2024*
