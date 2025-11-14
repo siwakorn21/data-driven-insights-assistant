@@ -61,10 +61,10 @@ Data-Driven Insights Assistant is a production-ready full-stack application that
   - Simple queries → Template-based (free, instant)
   - Medium queries → GPT-3.5-turbo ($0.001/query)
   - Complex queries → GPT-4 ($0.024/query)
-- **📊 Automatic Visualizations**: Smart chart selection (bar/line) based on data types
+- **📊 Automatic Visualizations**: Smart chart selection (bar/line) based on data types, responsive sizing, multi-color bars for single metric
 - **🔍 Live Data Preview**: First 50 rows displayed immediately after upload
-- **💬 Conversational AI**: Recognizes greetings and provides contextual help
-- **🎯 Intelligent Clarifications**: Asks follow-up questions for ambiguous queries
+- **💬 Conversational AI**: Recognizes greetings and provides contextual help, filters invalid input
+- **🎯 Intelligent Clarifications**: Asks follow-up questions for ambiguous queries with context memory
 - **📥 Export Results**: Download query results as CSV
 - **🔒 Secure Sessions**: UUID-based isolation with automatic cleanup (2-hour TTL)
 - **📚 Interactive API Docs**: Swagger UI for testing and exploring APIs
@@ -213,41 +213,106 @@ Data-Driven Insights Assistant is a production-ready full-stack application that
      │     • Display SQL            │                               │
      │     • Show data table        │                               │
      │     • Auto-generate chart    │                               │
-     │       (bar/line based on     │                               │
-     │        data types)           │                               │
+     │       (responsive sizing,    │                               │
+     │        multi-color bars for  │                               │
+     │        single metrics)       │                               │
      │                              │                               │
 ```
 
-#### 3. Conversational AI Flow
+#### 3. Conversational AI & Invalid Input Flow
 
 ```
 ┌─────────┐                  ┌─────────────┐                  ┌──────────┐
 │  User   │                  │   Backend   │                  │  OpenAI  │
 └────┬────┘                  └──────┬──────┘                  └────┬─────┘
      │                              │                               │
-     │  1. Send greeting: "Hello"   │                               │
+     │  1. Send input:              │                               │
+     │     "Hello" or "asd"         │                               │
      ├─────────────────────────────>│                               │
      │                              │                               │
-     │                              │  2. Detect conversation       │
-     │                              │     (not a data query)        │
+     │                              │  2. Classify input type       │
+     │                              │     • Invalid/gibberish       │
+     │                              │     • Greeting/conversation   │
+     │                              │     • Data query              │
      │                              ├──────────────────────────────>│
      │                              │                               │
-     │                              │  3. GPT-4 returns friendly    │
-     │                              │     response with suggestions │
-     │                              │     (sql: null)               │
+     │                              │  3. LLM responds based on     │
+     │                              │     input type:               │
+     │                              │     - Invalid: Ask to rephrase│
+     │                              │     - Greeting: Friendly help │
+     │                              │     - Query: Generate SQL     │
      │                              │<──────────────────────────────┤
      │                              │                               │
-     │  4. Return conversational    │                               │
-     │     response without         │                               │
-     │     executing SQL            │                               │
+     │  4. Return appropriate       │                               │
+     │     response (sql: null)     │                               │
      │<─────────────────────────────┤                               │
      │                              │                               │
-     │  5. Display friendly message │                               │
-     │     with query suggestions   │                               │
+     │  5. Display message with     │                               │
+     │     query examples           │                               │
      │                              │                               │
 ```
 
-#### 4. Session Management Flow
+#### 4. Clarification with Context Memory Flow
+
+```
+┌──────────┐                 ┌─────────────┐                 ┌──────────┐
+│ Frontend │                 │   Backend   │                 │  OpenAI  │
+└────┬─────┘                 └──────┬──────┘                 └────┬─────┘
+     │                              │                              │
+     │  1. Ask ambiguous query:     │                              │
+     │     "Show timeseries for     │                              │
+     │      hotels last month"      │                              │
+     ├─────────────────────────────>│                              │
+     │                              │  2. Detect ambiguity         │
+     │                              │     (no date granularity)    │
+     │                              ├─────────────────────────────>│
+     │                              │                              │
+     │                              │  3. LLM asks clarification   │
+     │                              │<─────────────────────────────┤
+     │                              │                              │
+     │  4. Store original question  │                              │
+     │     + clarification_id       │                              │
+     │     in pendingClarification  │                              │
+     │<─────────────────────────────┤                              │
+     │                              │                              │
+     │  5. Display clarification:   │                              │
+     │     "Each day or whole       │                              │
+     │      month? Options: ..."    │                              │
+     │                              │                              │
+     │  6. User answers:            │                              │
+     │     "Each day"               │                              │
+     ├─────────────────────────────>│                              │
+     │                              │                              │
+     │  7. Build context with:      │                              │
+     │     {                        │                              │
+     │       original_question: ... │                              │
+     │       clarification_answer:  │                              │
+     │         "Each day",          │                              │
+     │       clarification_id: ...  │                              │
+     │     }                        │                              │
+     │                              │                              │
+     │                              │  8. Send original question   │
+     │                              │     + context to LLM         │
+     │                              ├─────────────────────────────>│
+     │                              │                              │
+     │                              │  9. LLM generates SQL using  │
+     │                              │     original Q + answer      │
+     │                              │<─────────────────────────────┤
+     │                              │                              │
+     │                              │  10. Execute SQL (DuckDB)    │
+     │                              │      with daily grouping     │
+     │                              │                              │
+     │  11. Return results          │                              │
+     │      Clear pending           │                              │
+     │      clarification           │                              │
+     │<─────────────────────────────┤                              │
+     │                              │                              │
+     │  12. Display chart with      │                              │
+     │      daily timeseries data   │                              │
+     │                              │                              │
+```
+
+#### 5. Session Management Flow
 
 ```
 ┌──────────────────┐              ┌─────────────────────┐
@@ -277,7 +342,7 @@ Data-Driven Insights Assistant is a production-ready full-stack application that
          │                                   │
 ```
 
-#### 5. Complete Request-Response Cycle
+#### 6. Complete Request-Response Cycle
 
 ```
      User Action                  Backend Processing              External Services
@@ -318,7 +383,7 @@ Data-Driven Insights Assistant is a production-ready full-stack application that
          │                              │                               │
 ```
 
-#### 6. Intelligent Model Selection Flow (Production-Scale Routing)
+#### 7. Intelligent Model Selection Flow (Production-Scale Routing)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -592,6 +657,12 @@ See [backend/README.md](backend/README.md) for detailed request/response example
   - Subqueries and window functions
 - **Rationale**: Balances cost efficiency with quality - GPT-4 reserved for queries requiring superior reasoning
 - **See**: [Production Scale Guide](docs/PRODUCTION_SCALE.md)
+
+### 7. **Stateless Query Processing**
+- **Design**: Each query is independent (no multi-turn conversation memory)
+- **Exception**: Clarification context maintained for 1-level deep follow-up questions
+- **Rationale**: Simplicity, predictability, no context window overflow
+- **Trade-off**: Users must include full context in each question for best results
 
 ---
 
