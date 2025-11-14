@@ -44,7 +44,8 @@ app = FastAPI(
     title="Data-Driven Insights Assistant API",
     description="Backend API for natural language data querying with DuckDB",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
+    redoc_url=None  # Disable ReDoc documentation
 )
 
 # Configure CORS

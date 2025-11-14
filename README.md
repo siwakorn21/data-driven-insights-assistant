@@ -33,7 +33,6 @@
 - **Frontend**: http://localhost:5173
 - **Backend API**: http://localhost:8000
 - **Swagger UI**: http://localhost:8000/docs (Interactive API documentation)
-- **ReDoc**: http://localhost:8000/redoc (Alternative API documentation)
 
 ### Demo Workflow
 
@@ -68,7 +67,7 @@ Data-Driven Insights Assistant is a production-ready full-stack application that
 - **🎯 Intelligent Clarifications**: Asks follow-up questions for ambiguous queries
 - **📥 Export Results**: Download query results as CSV
 - **🔒 Secure Sessions**: UUID-based isolation with automatic cleanup (2-hour TTL)
-- **📚 Interactive API Docs**: Swagger UI and ReDoc for testing and exploring APIs
+- **📚 Interactive API Docs**: Swagger UI for testing and exploring APIs
 - **⚡ Real-time Updates**: Hot-reload in development mode
 - **🎨 Modern UI**: Responsive design with Tailwind CSS and Framer Motion
 
@@ -510,23 +509,6 @@ Full-featured interactive documentation where you can:
 - **See examples** - View sample requests and responses
 - **Test authentication** - No authentication required for this demo
 - **Download OpenAPI spec** - Export as JSON/YAML for client generation
-
-### ReDoc (http://localhost:8000/redoc)
-
-Alternative documentation interface with:
-- **Clean, responsive design** - Better for reading and sharing
-- **Search functionality** - Quickly find endpoints
-- **Code samples** - Multiple language examples
-- **Nested schemas** - Clear data model visualization
-
-### Features
-
-✅ **Auto-generated** - FastAPI automatically creates docs from code
-✅ **Always up-to-date** - Documentation syncs with code changes
-✅ **Request validation** - Shows required fields, types, constraints
-✅ **Response examples** - See exactly what each endpoint returns
-✅ **Error codes** - Documented HTTP status codes and error messages
-✅ **Type information** - Full Pydantic model schemas displayed
 
 ### Example Use Cases
 
