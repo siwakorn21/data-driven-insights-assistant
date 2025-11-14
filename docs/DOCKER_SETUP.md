@@ -92,7 +92,7 @@ docker-compose up
 | Service | Port | Description | Volume Mounts |
 |---------|------|-------------|---------------|
 | `backend` | 8000 | Production FastAPI | `backend-uploads:/app/uploads` |
-| `backend-dev` | 8001 | Dev FastAPI with hot-reload | `./backend:/app` |
+| `backend-dev` | 8000 | Dev FastAPI with hot-reload | `./backend:/app` |
 
 ### Frontend Services
 
