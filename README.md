@@ -82,16 +82,6 @@ Data-Driven Insights Assistant is a production-ready full-stack application that
 
 **Solution**: Full-stack architecture with intelligent backend processing.
 
-### Technical Achievements
-
-✅ **Production-Scale Routing**: Intelligent query routing system with 78% cost savings
-✅ **Scalable Backend**: DuckDB processes CSV files directly without loading into memory
-✅ **Type Safety**: Full TypeScript frontend + Pydantic backend validation
-✅ **Security First**: API keys never exposed to client, session isolation
-✅ **Production Ready**: Docker containerization, environment configs, error handling
-✅ **Clean Code**: Separation of concerns, service layer pattern, clear project structure
-✅ **Developer Experience**: Hot-reload, comprehensive logging, API documentation  
-
 ### Performance Considerations
 
 - **DuckDB** over in-memory databases → Handles large CSVs efficiently
