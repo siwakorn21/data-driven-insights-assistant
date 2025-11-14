@@ -73,6 +73,14 @@ When to set "ask_clarification": true (and "sql": null):
 **DO NOT** ask for clarification when:
 - Input is gibberish, random characters, or incomprehensible (use the invalid input response instead).
 - The query is clear and unambiguous.
+- The context already contains clarification answers (see below).
+
+**Handling clarification answers:**
+When the Context contains "original_question", "clarification_answer", and "clarification_id":
+- Use the original_question as the main query
+- Apply the clarification_answer to resolve the ambiguity
+- Generate the SQL based on the original question + the answer
+- Example: If original_question was "plot timeseries data between booking_date and revenue of Holiday Inn Chiang Mai and Centara Pattaya last month" and clarification_answer is "Each day", generate SQL that groups by each day of last month.
 
 Clarification JSON format (when asking):
 {
@@ -148,7 +156,7 @@ class LLMService:
             # Construct user message
             user_message = f"""User question: {question}
 
-Table schema (SQLite):
+Table schema (DuckDB):
 {schema}
 
 Context (answers to prior clarifications):
@@ -240,7 +248,7 @@ Context (answers to prior clarifications):
             # Construct user message
             user_message = f"""User question: {question}
 
-Table schema (SQLite):
+Table schema (DuckDB):
 {schema}
 
 Context (answers to prior clarifications):

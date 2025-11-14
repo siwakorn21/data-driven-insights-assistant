@@ -16,7 +16,9 @@ import {
   Legend,
   CartesianGrid,
   LineChart,
-  Line
+  Line,
+  ResponsiveContainer,
+  Cell
 } from "recharts";
 import { CHART_COLORS, WELCOME_MESSAGE } from "@/config/constants";
 import { apiClient } from "@/api";
@@ -68,7 +70,8 @@ export default function App() {
     rows: []
   });
 
-  const [clarContext] = useState<Record<string, any>>({});
+  const [clarContext, setClarContext] = useState<Record<string, any>>({});
+  const [pendingClarification, setPendingClarification] = useState<{ originalQuestion: string; clarificationId: string } | null>(null);
 
   // -------- CSV Upload --------
   const onCSV = async (file: File) => {
@@ -149,17 +152,35 @@ export default function App() {
     setMessages((m) => [...m, { role: "user", content: userInput }]);
 
     try {
+      // Build context: if answering a clarification, include original question
+      let queryContext = { ...clarContext };
+      if (pendingClarification) {
+        queryContext = {
+          ...queryContext,
+          original_question: pendingClarification.originalQuestion,
+          clarification_answer: userInput,
+          clarification_id: pendingClarification.clarificationId,
+        };
+      }
+
       // Call backend query API
       const response = await apiClient.executeQuery({
         session_id: sessionId,
-        question: userInput,
-        context: clarContext,
+        question: pendingClarification ? pendingClarification.originalQuestion : userInput,
+        context: queryContext,
       });
 
       // Handle clarification
       if (response.ask_clarification) {
         const q = response.clarification;
         const opts = q?.options?.length ? `\nOptions: ${q.options.join(", ")}` : "";
+
+        // Store pending clarification
+        setPendingClarification({
+          originalQuestion: userInput,
+          clarificationId: q?.id || 'clarification',
+        });
+
         setMessages((m) => [
           ...m,
           {
@@ -171,10 +192,14 @@ export default function App() {
       // Handle error
       else if (response.error) {
         setError(response.error);
+        setPendingClarification(null); // Clear clarification on error
       }
       // Handle SQL result or conversational response
       else {
         const { sql, columns, rows, explanation } = response;
+
+        // Clear pending clarification when we get a successful response
+        setPendingClarification(null);
 
         // Conversational response (no SQL generated, just explanation)
         if (!sql) {
@@ -489,45 +514,58 @@ export default function App() {
                       Run a query that returns an X and numeric Y (and optionally date-ish X) to auto-chart.
                     </div>
                   ) : chartHint.type === 'line' ? (
-                    <LineChart width={800} height={360} data={result.rows as any}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                      <XAxis dataKey={chartHint.x} stroke="#64748b" />
-                      <YAxis stroke="#64748b" />
-                      <Tooltip
-                        contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '6px' }}
-                        labelStyle={{ color: '#1e293b' }}
-                      />
-                      <Legend />
-                      {result.columns.filter(c => c !== chartHint.x).map((col, idx) => (
-                        <Line
-                          key={col}
-                          type="monotone"
-                          dataKey={col}
-                          stroke={CHART_COLORS[idx % CHART_COLORS.length]}
-                          strokeWidth={2}
-                          dot={false}
+                    <ResponsiveContainer width="100%" height={360}>
+                      <LineChart data={result.rows as any}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis dataKey={chartHint.x} stroke="#64748b" />
+                        <YAxis stroke="#64748b" />
+                        <Tooltip
+                          contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '6px' }}
+                          labelStyle={{ color: '#1e293b' }}
                         />
-                      ))}
-                    </LineChart>
+                        <Legend />
+                        {result.columns.filter(c => c !== chartHint.x).map((col, idx) => (
+                          <Line
+                            key={col}
+                            type="monotone"
+                            dataKey={col}
+                            stroke={CHART_COLORS[idx % CHART_COLORS.length]}
+                            strokeWidth={2}
+                            dot={false}
+                          />
+                        ))}
+                      </LineChart>
+                    </ResponsiveContainer>
                   ) : (
-                    <BarChart width={800} height={360} data={result.rows as any}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                      <XAxis dataKey={chartHint.x} stroke="#64748b" />
-                      <YAxis stroke="#64748b" />
-                      <Tooltip
-                        contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '6px' }}
-                        labelStyle={{ color: '#1e293b' }}
-                      />
-                      <Legend />
-                      {result.columns.filter(c => c !== chartHint.x).map((col, idx) => (
-                        <Bar
-                          key={col}
-                          dataKey={col}
-                          fill={CHART_COLORS[idx % CHART_COLORS.length]}
-                          radius={[8, 8, 0, 0]}
+                    <ResponsiveContainer width="100%" height={360}>
+                      <BarChart data={result.rows as any}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis dataKey={chartHint.x} stroke="#64748b" />
+                        <YAxis stroke="#64748b" />
+                        <Tooltip
+                          contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '6px' }}
+                          labelStyle={{ color: '#1e293b' }}
                         />
-                      ))}
-                    </BarChart>
+                        <Legend />
+                        {result.columns.filter(c => c !== chartHint.x).map((col, idx) => {
+                          const yColumns = result.columns.filter(c => c !== chartHint.x);
+                          const isSingleColumn = yColumns.length === 1;
+
+                          return (
+                            <Bar
+                              key={col}
+                              dataKey={col}
+                              fill={isSingleColumn ? undefined : CHART_COLORS[idx % CHART_COLORS.length]}
+                              radius={[8, 8, 0, 0]}
+                            >
+                              {isSingleColumn && result.rows.map((row, rowIdx) => (
+                                <Cell key={`cell-${rowIdx}`} fill={CHART_COLORS[rowIdx % CHART_COLORS.length]} />
+                              ))}
+                            </Bar>
+                          );
+                        })}
+                      </BarChart>
+                    </ResponsiveContainer>
                   )}
                 </CardContent>
               </Card>
